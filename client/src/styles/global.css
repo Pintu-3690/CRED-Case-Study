@@ -64,6 +64,7 @@
 html {
   scroll-behavior: smooth;
   color-scheme: dark;
+  overflow-x: hidden;
 }
 
 body {
@@ -2622,6 +2623,8 @@ h1, h2, h3, h4, h5 {
 }
 
 .comp-table-responsive {
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
 }
 
@@ -3056,6 +3059,83 @@ h1, h2, h3, h4, h5 {
 }
 
 @media (max-width: 768px) {
+  .container {
+    padding: 0 16px;
+  }
+
+  .telemetry-inner,
+  .nav__inner {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .hero {
+    padding: 48px 0 40px;
+  }
+
+  .hero__top-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .hero__live-strip {
+    align-items: stretch;
+    gap: 14px;
+    overflow-x: auto;
+    padding: 12px 14px;
+  }
+
+  .hero__live-strip .live-strip-item {
+    min-width: max-content;
+  }
+
+  .hero__grid > *,
+  .share-terminal-grid > *,
+  .exec-body-grid > *,
+  .fin-grid > *,
+  .founder-main-grid > *,
+  .spotlight-grid > *,
+  .timeline-grid > *,
+  .comp-outlook-grid > * {
+    min-width: 0;
+  }
+
+  .share-header,
+  .timeframe-bar,
+  .timeline-chart-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .share-price-display {
+    align-items: flex-start;
+  }
+
+  .share-ticker {
+    flex-wrap: wrap;
+  }
+
+  .mech-row {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .mech-label {
+    min-width: 0;
+  }
+
+  .sim-result-banner {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 18px 20px;
+  }
+
+  .res-divider {
+    width: 100%;
+    height: 1px;
+  }
+
   .nav__links {
     display: none;
   }
@@ -3063,6 +3143,9 @@ h1, h2, h3, h4, h5 {
     display: block;
   }
   .nav__mobile {
+    display: none;
+  }
+  .nav--open .nav__mobile {
     display: flex;
     flex-direction: column;
     gap: 14px;
