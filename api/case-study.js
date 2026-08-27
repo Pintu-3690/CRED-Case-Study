@@ -1,4 +1,4 @@
-import * as data from "../server/data.js";
+import * as data from '../data.js';
 
 export default function handler(request, response) {
   if (request.method !== "GET") {
