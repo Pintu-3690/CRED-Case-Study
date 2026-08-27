@@ -1,17 +1,8 @@
 {
   "version": 2,
-<<<<<<< HEAD
   "installCommand": "cd client && npm install",
   "buildCommand": "cd client && npm run build",
   "outputDirectory": "client/dist",
-  "rewrites": [
-    {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
-    }
-  ]
-}
-=======
   "functions": {
     "api/*.mjs": { "runtime": "nodejs18.x" }
   },
@@ -21,4 +12,3 @@
     { "src": "/(?!api)(.*)", "dest": "/client/dist/index.html" }
   ]
 }
->>>>>>> 2c754bfa6345d96ef7e5622b4b911873e81f5fec
