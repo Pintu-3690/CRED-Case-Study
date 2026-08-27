@@ -41,7 +41,7 @@ app.get("/api/case-study", (req, res) => {
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 
 // Serve the built React client in production.
-const clientDist = path.join(__dirname, "..", "client", "dist");
+const clientDist = path.join(__dirname, "client", "dist");
 app.use(express.static(clientDist));
 app.get(/^(?!\/api).*/, (req, res) => {
   res.sendFile(path.join(clientDist, "index.html"));
