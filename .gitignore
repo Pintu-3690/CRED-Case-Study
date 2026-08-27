@@ -6,3 +6,11 @@ dist/
 .env
 .env.local
 .DS_Store
+
+# AI tool internals (do not commit)
+.agents/
+.claude/
+.firebase/
+.firebaserc
+firebase.json
+skills-lock.json
