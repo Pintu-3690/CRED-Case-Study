@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "functions": {
+    "api/*.mjs": { "runtime": "nodejs18.x" }
+  },
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1.mjs" },
+    { "src": "/(.*\\.(js|css|png|jpg|jpeg|svg|ico|json))", "dest": "/client/dist/$1" },
+    { "src": "/(?!api)(.*)", "dest": "/client/dist/index.html" }
+  ]
+}
