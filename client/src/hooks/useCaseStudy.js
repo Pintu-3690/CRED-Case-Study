@@ -16,11 +16,13 @@ export default function useCaseStudy() {
       .then((json) => {
         if (!cancelled && json) {
           setData(json);
+          setError(null);
           setIsLiveSync(true);
         }
       })
       .catch((e) => {
         // Fallback already in place, log gentle warning without breaking UI
+        if (!cancelled) setError(e);
         console.warn("Backend API sync notice (using bundled high-fidelity dataset):", e.message);
       });
     return () => {
