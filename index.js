@@ -1,17 +1,13 @@
 import express from "express";
 import cors from "cors";
-import path from "path";
-import { fileURLToPath } from "url";
 import * as data from "./data.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-const PORT = process.env.PORT || 4000;
 
 app.use(cors());
 app.use(express.json());
 
-// Single endpoint returning the full structured case-study payload.
+// API Endpoints
 app.get("/api/case-study", (req, res) => {
   res.json({
     meta: data.meta,
@@ -40,13 +36,13 @@ app.get("/api/case-study", (req, res) => {
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 
-// Serve the built React client in production.
-const clientDist = path.join(__dirname, "client", "dist");
-app.use(express.static(clientDist));
-app.get(/^(?!\/api).*/, (req, res) => {
-  res.sendFile(path.join(clientDist, "index.html"));
-});
+// ONLY run app.listen when developing locally
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 4000;
+  app.listen(PORT, () => {
+    console.log(`CRED case-study API running on http://localhost:${PORT}`);
+  });
+}
 
-app.listen(PORT, () => {
-  console.log(`CRED case-study API running on http://localhost:${PORT}`);
-});
+// Export default app for Vercel Serverless Function engine
+export default app;
