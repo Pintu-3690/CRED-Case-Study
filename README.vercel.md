@@ -1,23 +1,15 @@
-Vercel deployment helper
+# Vercel Deployment Guide
 
-What I added
+### Deployment Architecture
+- **Build Command:** `npm run build`
+- **Output Directory:** `dist`
+- **Serverless API Routes:**
+  - `GET /api/case-study` (from `api/case-study.js`)
+  - `GET /api/health` (from `api/health.js`)
+- **SPA Routing:** Fallback rewrite for all non-API paths to `index.html`.
 
-- vercel.json: Routes and function runtime configuration to serve the client from client/dist and expose serverless API endpoints under /api/*.
-- api/case-study.mjs: Vercel serverless function that returns the same case-study JSON as the original Express API endpoint.
-- api/health.mjs: Simple health check endpoint used by platforms to verify deployment.
+### Verification Steps
+1. Push all changes to GitHub (`git add . && git commit -m "Configure Vercel deployment" && git push`).
+2. Import repository on [Vercel](https://vercel.com/dashboard).
+3. The project will build and deploy cleanly using `vercel.json` settings.
 
-Notes & next steps
-
-1. Ensure the client build exists at client/dist in the repository. Vercel will serve static files from client/dist. If your client is a separate project, either copy the built dist into client/dist or update vercel.json to point to the correct path.
-
-2. If you prefer to run the monolithic Express server instead of serverless functions, update package.json with a build/start script and set the Vercel project to use "Node.js" with a custom start command. Serverless functions are recommended for simplicity and fast scaling.
-
-3. Deploy on Vercel:
-   - Push these changes to GitHub (done).
-   - Sign in to Vercel, import the GitHub repo, and deploy. Vercel will detect the api functions and use vercel.json configuration.
-
-4. Test endpoints after deploy:
-   - https://<your-vercel-domain>/api/case-study
-   - https://<your-vercel-domain>/api/health
-
-If you want, I can instead convert your existing Express app into a single serverless function (using the code in index.js) or add a Vercel build step to produce the client into client/dist. Tell me which you prefer and I'll update the repository accordingly.

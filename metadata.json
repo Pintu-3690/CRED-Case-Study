@@ -1,0 +1,6 @@
+{
+  "name": "CRED Case Study",
+  "description": "An independent strategic business and financial analysis of CRED (Dreamplug Technologies): business model, valuation history, financials, SWOT, PESTLE, and competitive landscape.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
