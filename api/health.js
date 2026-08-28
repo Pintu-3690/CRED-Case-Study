@@ -1,8 +1,3 @@
-export default function handler(request, response) {
-  if (request.method !== "GET") {
-    response.setHeader("Allow", "GET");
-    return response.status(405).json({ error: "Method not allowed" });
-  }
-
-  return response.status(200).json({ ok: true });
-}
+// DEPRECATED: This file should be deleted
+// Use api/health.mjs instead for Vercel deployment
+// To remove this file, run: git rm api/health.js && git commit -m "Remove duplicate CommonJS handler"
