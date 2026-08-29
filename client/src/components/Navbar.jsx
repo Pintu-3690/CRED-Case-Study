@@ -3,12 +3,13 @@ import { Menu, X, ArrowUpRight, Volume2, VolumeX, Shield, Activity } from "lucid
 
 const LINKS = [
   { href: "#overview", label: "Overview" },
-  { href: "#live-share", label: "Live Share & Valuation", highlight: true },
-  { href: "#founder", label: "Founder & Thesis" },
+  { href: "#trading-terminal", label: "Live Trading Terminal", highlight: true },
+  { href: "#valuation-workbench", label: "DCF Modeler & Cap Table", highlight: true },
+  { href: "#peer-matrix", label: "Peer Comps" },
   { href: "#ecosystem", label: "Ecosystem" },
-  { href: "#financials", label: "Financials" },
-  { href: "#valuation-history", label: "Cap Table" },
+  { href: "#financials", label: "Financials & P&L" },
   { href: "#strategy", label: "SWOT & PESTLE" },
+  { href: "#founder", label: "Founder Thesis" },
   { href: "#intel-faq", label: "Intelligence Hub" },
 ];
 

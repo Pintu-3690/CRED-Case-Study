@@ -1,9 +1,12 @@
 import { useState, useCallback } from "react";
 import useCaseStudy from "./hooks/useCaseStudy";
+import useRealtimeTrading from "./hooks/useRealtimeTrading";
 import LiveTelemetryBar from "./components/LiveTelemetryBar";
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
-import LiveShareTracker from "./components/LiveShareTracker";
+import LiveTradingTerminal from "./components/LiveTradingTerminal";
+import ValuationWorkbench from "./components/ValuationWorkbench";
+import PeerComparisonMatrix from "./components/PeerComparisonMatrix";
 import ExecutiveSummary from "./components/ExecutiveSummary";
 import KpiDashboard from "./components/KpiDashboard";
 import FounderAndGating from "./components/FounderAndGating";
@@ -21,6 +24,7 @@ import Footer from "./components/Footer";
 
 export default function App() {
   const { data } = useCaseStudy();
+  const tradingState = useRealtimeTrading("CRED:UNLST");
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
 
   // Subtle web-audio synthesizer click for optional audio feedback
@@ -58,12 +62,32 @@ export default function App() {
 
   return (
     <div className="app-root" onClick={playClickSound}>
-      <LiveTelemetryBar initialData={d.liveTelemetryInitial} />
+      <LiveTelemetryBar 
+        initialData={d.liveTelemetryInitial} 
+        realTimeTelemetry={tradingState.telemetry}
+        liveQuote={tradingState.quote}
+      />
       <Navbar isAudioEnabled={isAudioEnabled} toggleAudio={toggleAudio} />
       <main id="main-content">
         <Hero meta={d.meta} founder={d.founder} />
         <ExecutiveSummary />
-        <LiveShareTracker marketData={d.unlistedShareMarket} capTable={d.unlistedShareMarket?.capTable} />
+        
+        {/* Flagship Real-Time Financial Trading Terminal */}
+        <LiveTradingTerminal 
+          tradingState={tradingState}
+          onSelectSymbol={tradingState.changeSymbol}
+        />
+
+        {/* Institutional DCF Modeler, Waterfall & Cap Table Studio */}
+        <ValuationWorkbench capTable={d.unlistedShareMarket?.capTable || []} />
+
+        {/* Multi-Asset Peer Multiples & Comp Matrix */}
+        <PeerComparisonMatrix 
+          peers={tradingState.peers}
+          selectedSymbol={tradingState.selectedSymbol}
+          onSelectSymbol={tradingState.changeSymbol}
+        />
+
         <KpiDashboard kpis={d.kpis} />
         <FounderAndGating founder={d.founder} gating={d.gatingMechanics} />
         <HowCredWorks steps={d.howCredWorks} />
@@ -81,3 +105,4 @@ export default function App() {
     </div>
   );
 }
+
