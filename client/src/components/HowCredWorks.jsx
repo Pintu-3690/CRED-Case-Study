@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { ChevronRight, ShieldCheck, CreditCard, CheckCircle2, Award, Zap, ArrowRight } from "lucide-react";
 import Reveal from "./Reveal";
 
 export default function HowCredWorks({ steps = [] }) {
@@ -9,9 +8,10 @@ export default function HowCredWorks({ steps = [] }) {
     <section className="how-cred-works-section" id="how-it-works">
       <div className="container">
         <Reveal className="section-head">
-          <div className="eyebrow-pill">
-            <Zap size={14} className="accent-gold" />
-            <span>THE 5-STAGE MEMBER LIFECYCLE</span>
+          <div className="editorial-kicker">
+            <span>09</span>
+            <span aria-hidden="true">·</span>
+            <span>The 5-Stage Member Lifecycle</span>
           </div>
           <h2>How the CRED Loop Engages &amp; Monetizes</h2>
           <p>
@@ -19,18 +19,17 @@ export default function HowCredWorks({ steps = [] }) {
           </p>
         </Reveal>
 
-        {/* Steps Flow Grid */}
         <div className="flow-grid-interactive">
           {steps.map((s, i) => (
             <Reveal
               as="div"
               key={s.step}
-              delay={i * 60}
+              delay={i * 50}
               className={`card flow-step-card ${activeStep === i ? "active-step" : ""}`}
               onClick={() => setActiveStep(i)}
             >
               <div className="step-top-badge">
-                <span className="step-num-pill">0{i + 1}</span>
+                <span className="step-num-pill tabular-nums">0{i + 1}</span>
                 {s.badge && <span className="step-sub-badge">{s.badge}</span>}
               </div>
 

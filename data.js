@@ -149,16 +149,19 @@ export const founder = {
 };
 
 export const unlistedShareMarket = {
-  ticker: "CRED-UNLTD",
+  ticker: "CRED:UNLST",
   companyName: "Dreamplug Technologies Pvt. Ltd.",
+  isin: "INE02XY01014 (Unlisted Private)",
   currentPriceINR: 284.50,
   currency: "INR",
   faceValueINR: 1.00,
+  authorizedCapitalINR: "₹150.00 Cr (150 Cr Equity & CCPS)",
   range52w: { low: 185.00, high: 342.00 },
   impliedValuationUSD: "4.50 Billion",
-  impliedValuationINR: "₹37,800 Cr",
-  sharesOutstanding: "132.8 Cr Shares (Fully Diluted)",
-  lotSize: 100,
+  impliedValuationINR: "₹37,565 Cr",
+  sharesOutstanding: "132.04 Cr Shares (Fully Diluted)",
+  sharesOutstandingM: 1320.4,
+  lotSize: 50,
   orderBookDepth: {
     bids: [
       { price: 284.20, qty: 15000 },
@@ -174,13 +177,21 @@ export const unlistedShareMarket = {
     ]
   },
   capTable: [
-    { holder: "Peak XV Partners (Sequoia India)", share: 21.4, color: "#ff3355" },
-    { holder: "Meta Platforms Inc. (Strategic)", share: 20.0, color: "#0084ff" },
-    { holder: "Kunal Shah & Founders", share: 15.2, color: "#ffd700" },
-    { holder: "Tiger Global Management", share: 13.8, color: "#00df82" },
-    { holder: "ESOP Pool & Key Employees", share: 14.1, color: "#b388ff" },
-    { holder: "Alpha Wave / Falcon Edge", share: 8.9, color: "#ff9100" },
-    { holder: "Ribbit Capital & Dragoneer", share: 6.6, color: "#00e5ff" },
+    { holder: "Peak XV Partners (Sequoia India)", category: "Institutional VC", share: 21.4, sharesM: 282.57, avgEntryInr: 72.40, votingRights: "CCPS 1:1", color: "#ff3355" },
+    { holder: "Meta Platforms Inc. (Series H)", category: "Strategic", share: 20.0, sharesM: 264.08, avgEntryInr: 284.50, votingRights: "Series H Pref", color: "#3b82f6" },
+    { holder: "Kunal Shah & Founders", category: "Founders & ESOP", share: 15.2, sharesM: 200.70, avgEntryInr: 1.00, votingRights: "Common Equity", color: "#e5c158" },
+    { holder: "ESOP Pool & Key Employees", category: "Founders & ESOP", share: 14.1, sharesM: 186.18, avgEntryInr: 14.50, votingRights: "Vested & Pool", color: "#a78bfa" },
+    { holder: "Tiger Global Management", category: "Institutional VC", share: 13.8, sharesM: 182.21, avgEntryInr: 196.80, votingRights: "CCPS 1:1", color: "#00df82" },
+    { holder: "Alpha Wave / Falcon Edge & GIC", category: "Institutional VC", share: 8.9, sharesM: 117.52, avgEntryInr: 258.00, votingRights: "CCPS 1:1", color: "#fb923c" },
+    { holder: "Ribbit Capital, Dragoneer & Sofina", category: "Institutional VC", share: 6.6, sharesM: 87.14, avgEntryInr: 164.20, votingRights: "CCPS 1:1", color: "#22d3ee" },
+  ],
+  shareClasses: [
+    { className: "Founder Common Equity Shares", instrument: "Face Value ₹1.00 Equity", sharesM: 200.70, pct: 15.2, issuePriceInr: 1.00, status: "Issued & Paid-Up", liquidity: "Founder Lock-In" },
+    { className: "Series Seed – Series C CCPS", instrument: "Compulsorily Convertible Pref", sharesM: 245.50, pct: 18.6, issuePriceInr: 48.60, status: "Converted 1:1 Basis", liquidity: "Institutional Hold" },
+    { className: "Series D – Series F CCPS", instrument: "Compulsorily Convertible Pref", sharesM: 328.90, pct: 24.9, issuePriceInr: 274.20, status: "Senior Liquidation Pref", liquidity: "Partial Secondary OTC" },
+    { className: "Series G & Series H (Meta Strategic)", instrument: "Strategic Preferred Equity", sharesM: 359.12, pct: 27.2, issuePriceInr: 276.40, status: "2025–2026 Issuance", liquidity: "Strategic Board Seat" },
+    { className: "Employee Stock Option Plan (ESOP)", instrument: "Vested & Unvested Options", sharesM: 138.64, pct: 10.5, issuePriceInr: 14.50, status: "4-Yr Vesting Schedule", liquidity: "Periodic Buyback" },
+    { className: "Secondary OTC Free-Float Pool", instrument: "Demat Unlisted Equity (NSDL)", sharesM: 47.54, pct: 3.6, issuePriceInr: 284.50, status: "Active OTC Desk", liquidity: "T+1 Escrow (50-sh Lot)" },
   ]
 };
 
@@ -254,40 +265,40 @@ export const productEcosystem = [
     category: "Digital Lending & P2P",
     share: 45, 
     color: "#00df82", 
-    image: "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=800&auto=format&fit=crop&q=80",
-    detail: "Instant pre-approved personal credit lines up to ₹10,000,000 disbursable in 30 seconds directly to bank accounts. Partnered with LiquiLoans, IDFC First Bank, and L&T Finance. Managed lending AUM has scaled past ₹22,000 Cr with industry-leading prime repayment records.",
+    image: "/assets/images/cred_cash_lending_1794843054137.jpg",
+    detail: "Instant pre-approved personal credit lines up to ₹10,00,000 (₹10 Lakh) disbursable in 30 seconds directly to bank accounts. Partnered with LiquiLoans, IDFC First Bank, and L&T Finance. Managed lending AUM has scaled past ₹22,000 Cr with industry-leading prime repayment records.",
     revenueModel: "Processing fee (1.5%–2.5%) + Net Interest Margin share (2%–4% spread)",
-    metrics: "₹22,000+ Cr AUM • <1.2% Default Rate"
+    metrics: "₹22,000+ Cr AUM · <1.2% Default Rate"
   },
   { 
     name: "CRED Garage & Motor Insurance", 
     category: "Automotive Management",
     share: 22, 
-    color: "#00e5ff", 
-    image: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=800&auto=format&fit=crop&q=80",
+    color: "#22d3ee", 
+    image: "/assets/images/cred_garage_auto_1794843054104.jpg",
     detail: "A comprehensive vehicle lifecycle concierge tracking FASTag balances, live fuel price tracking, challan notifications, pollution check alerts, and one-click motor insurance renewals under CRED's direct IRDAI corporate-agency license.",
     revenueModel: "15%–20% brokerage commission on comprehensive car/bike insurance policies + FASTag recharge take rates",
-    metrics: "4.5M+ Registered Vehicles • ₹500+ Cr Insurance Premiums"
+    metrics: "4.5M+ Registered Vehicles · ₹500+ Cr Insurance Premiums"
   },
   { 
     name: "Kuvera Wealth Management", 
     category: "Investments & Advisory",
     share: 18, 
-    color: "#b388ff", 
-    image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop&q=80",
+    color: "#a78bfa", 
+    image: "/assets/images/kuvera_wealth_portal_1794843054803.jpg",
     detail: "Acquired in 2024, Kuvera brings ₹50,000+ Cr in Assets Under Advisory across zero-commission direct mutual funds, Indian equities, Fixed Deposits, and US equities into the CRED ecosystem, turning CRED into a holistic balance-sheet manager.",
     revenueModel: "B2B platform fees, premium advisory tiers, high-yield fixed-income distribution margins",
-    metrics: "₹50,000+ Cr AUM • 3.2M+ Investor Portfolios"
+    metrics: "₹50,000+ Cr AUM · 3.2M+ Investor Portfolios"
   },
   { 
     name: "CRED Pay, Store & Escapes", 
     category: "Commerce & Travel",
     share: 15, 
     color: "#ff3355", 
-    image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&auto=format&fit=crop&q=80",
+    image: "/assets/images/cred_escapes_luxury_1794843055723.jpg",
     detail: "CRED Pay powers online 1-click checkout across top D2C merchants, while CRED Escapes offers curated experiential luxury stays at 5-star properties (Taj, Oberoi, Marriott) with exclusive member perks and coin burn redemption.",
     revenueModel: "1%–3% merchant checkout take rate + 10%–20% hospitality commission on Escapes bookings",
-    metrics: "1,200+ Brand Partners • 150K+ Luxury Stays Booked"
+    metrics: "1,200+ Brand Partners · 150K+ Luxury Stays Booked"
   },
 ];
 

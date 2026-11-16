@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { Check, ShieldCheck, Zap, ArrowUpRight, TrendingUp, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import Reveal from "./Reveal";
 
 export default function Competition({ competitors, outlook }) {
@@ -9,19 +8,19 @@ export default function Competition({ competitors, outlook }) {
     <section className="competition-section" id="competition">
       <div className="container">
         <Reveal className="section-head">
-          <div className="eyebrow-pill">
-            <TrendingUp size={14} className="accent-cyan" />
-            <span>BENCHMARK MATRIX</span>
+          <div className="editorial-kicker">
+            <span>16</span>
+            <span aria-hidden="true">·</span>
+            <span>Competitive Matrix &amp; Strategic Deal</span>
           </div>
           <h2>Competitive Positioning vs. Indian FinTech Giants</h2>
           <p>{competitors.note}</p>
         </Reveal>
 
         <div className="comp-outlook-grid">
-          {/* Left: Comparison Table */}
           <Reveal as="div" className="card comp-table-card">
             <div className="comp-table-responsive">
-              <table className="comp-table">
+              <table className="comp-table tabular-nums">
                 <thead>
                   <tr>
                     {competitors.headers.map((h, i) => (
@@ -47,10 +46,9 @@ export default function Competition({ competitors, outlook }) {
             </div>
           </Reveal>
 
-          {/* Right: Meta Strategic Outlook Card */}
-          <Reveal as="div" delay={100} className="card outlook-card">
+          <Reveal as="div" delay={80} className="card outlook-card">
             <div className="outlook-header">
-              <span className="outlook-badge-pill">{outlook.badge}</span>
+              <span className="outlook-kicker font-mono">{outlook.badge}</span>
               <h3>{outlook.title}</h3>
               <p className="outlook-body-text">{outlook.body}</p>
             </div>

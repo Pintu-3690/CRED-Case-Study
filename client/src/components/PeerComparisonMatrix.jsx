@@ -1,92 +1,80 @@
-import { useState, useMemo } from "react";
-import { TrendingUp, TrendingDown, Layers, ShieldCheck, ArrowUpRight, BarChart2, CheckCircle2, Sliders } from "lucide-react";
+import { useMemo } from "react";
+import { BarChart2 } from "lucide-react";
 import Reveal from "./Reveal";
 
-export default function PeerComparisonMatrix({ peers = [], selectedSymbol, onSelectSymbol }) {
-  const [sortKey, setSortKey] = useState("evRevenue");
-  const [sortOrder, setSortOrder] = useState("desc");
-
+export default function PeerComparisonMatrix({ peers = [], onSelectSymbol }) {
   const peerComps = useMemo(() => {
+    const liveBySymbol = Object.fromEntries(peers.map((p) => [p.symbol, p]));
+
+    const credLive = liveBySymbol["CRED:UNLST"];
+    const paytmLive = liveBySymbol["PAYTM:NSE"];
+    const pbLive = liveBySymbol["POLICYBZR:NSE"];
+    const zomatoLive = liveBySymbol["ZOMATO:NSE"];
+
     return [
       {
         symbol: "CRED:UNLST",
         name: "CRED (Dreamplug)",
         market: "Unlisted OTC / Series H",
-        price: "₹284.50",
-        marketCapUsd: "$4.50B",
-        tpvAnnualCr: "₹8.5 Lakh Cr",
+        price: credLive ? `₹${credLive.price.toFixed(2)}` : "₹284.50",
+        marketCapUsd: credLive?.impliedMarketCapUsd ? `$${credLive.impliedMarketCapUsd.toFixed(2)}B` : "$4.30B",
         revenueCr: "₹2,735 Cr",
         revGrowthYoY: "+16.0%",
-        evRevenue: "13.8x",
-        evTpv: "0.44%",
+        evRevenue: credLive?.impliedMarketCapUsd ? `${((credLive.impliedMarketCapUsd * 8742) / 2735).toFixed(1)}x` : "13.7x",
         arpuInr: "₹2,150",
         grossMargin: "74.6%",
-        ebitdaMargin: "-10.8%",
-        ruleOf40: "5.2%",
         ltvCac: "25.4x",
         cibilGate: "750+ Prime",
-        status: "Target Case Study",
-        isTarget: true
+        isTarget: true,
+        trackable: true
       },
       {
         symbol: "PAYTM:NSE",
         name: "One97 Communications",
         market: "NSE / BSE Listed",
-        price: "₹684.20",
+        price: paytmLive ? `₹${paytmLive.price.toFixed(2)}` : "₹684.20",
         marketCapUsd: "$5.10B",
-        tpvAnnualCr: "₹18.2 Lakh Cr",
         revenueCr: "₹6,150 Cr",
         revGrowthYoY: "-8.5%",
         evRevenue: "6.9x",
-        evTpv: "0.23%",
         arpuInr: "₹310",
         grossMargin: "48.2%",
-        ebitdaMargin: "2.4%",
-        ruleOf40: "-6.1%",
         ltvCac: "1.8x",
         cibilGate: "Mass Market (All)",
-        status: "Listed Comparable",
-        isTarget: false
+        isTarget: false,
+        trackable: true
       },
       {
         symbol: "POLICYBZR:NSE",
         name: "PB Fintech Ltd.",
         market: "NSE / BSE Listed",
-        price: "₹1,742.80",
+        price: pbLive ? `₹${pbLive.price.toFixed(2)}` : "₹1,742.80",
         marketCapUsd: "$9.40B",
-        tpvAnnualCr: "₹22,000 Cr Premium",
         revenueCr: "₹3,880 Cr",
         revGrowthYoY: "+38.4%",
         evRevenue: "20.2x",
-        evTpv: "3.55%",
         arpuInr: "₹1,650",
         grossMargin: "68.5%",
-        ebitdaMargin: "14.2%",
-        ruleOf40: "52.6%",
         ltvCac: "4.2x",
         cibilGate: "Insurance Buyers",
-        status: "Listed Comparable",
-        isTarget: false
+        isTarget: false,
+        trackable: true
       },
       {
         symbol: "ZOMATO:NSE",
         name: "Zomato Ltd. (Blinkit + District)",
         market: "NSE / BSE Listed",
-        price: "₹262.40",
-        marketCapUsd: "$27.5B",
-        tpvAnnualCr: "₹45,000 Cr GOV",
+        price: zomatoLive ? `₹${zomatoLive.price.toFixed(2)}` : "₹262.40",
+        marketCapUsd: "$27.50B",
         revenueCr: "₹15,200 Cr",
         revGrowthYoY: "+68.0%",
         evRevenue: "15.1x",
-        evTpv: "5.10%",
         arpuInr: "₹820",
         grossMargin: "56.0%",
-        ebitdaMargin: "8.5%",
-        ruleOf40: "76.5%",
         ltvCac: "6.8x",
         cibilGate: "Affluent Urban",
-        status: "Consumer Tech Benchmark",
-        isTarget: false
+        isTarget: false,
+        trackable: true
       },
       {
         symbol: "GROWW:UNLST",
@@ -94,89 +82,80 @@ export default function PeerComparisonMatrix({ peers = [], selectedSymbol, onSel
         market: "Unlisted Benchmark",
         price: "Private",
         marketCapUsd: "$3.00B",
-        tpvAnnualCr: "₹12.0 Lakh Cr",
         revenueCr: "₹3,140 Cr",
-        revGrowthYoY: "+118%",
+        revGrowthYoY: "+118.0%",
         evRevenue: "7.9x",
-        evTpv: "0.21%",
         arpuInr: "₹1,250",
         grossMargin: "82.0%",
-        ebitdaMargin: "18.0%",
-        ruleOf40: "136.0%",
         ltvCac: "3.5x",
         cibilGate: "Retail Broking",
-        status: "Wealth Benchmark",
-        isTarget: false
+        isTarget: false,
+        trackable: false
       },
       {
         symbol: "NU:NYSE",
         name: "Nu Holdings (Nubank LatAm)",
         market: "NYSE Listed Global",
         price: "$14.80",
-        marketCapUsd: "$71.0B",
-        tpvAnnualCr: "$110B+ Volume",
+        marketCapUsd: "$71.00B",
         revenueCr: "₹68,000 Cr ($8.0B)",
         revGrowthYoY: "+56.0%",
         evRevenue: "8.8x",
-        evTpv: "0.64%",
         arpuInr: "₹9,800 ($112)",
         grossMargin: "45.0%",
-        ebitdaMargin: "38.0%",
-        ruleOf40: "94.0%",
         ltvCac: "30.0x+",
         cibilGate: "Credit + Digital Bank",
-        status: "Global Gold Standard",
-        isTarget: false
+        isTarget: false,
+        trackable: false
       }
     ];
-  }, []);
+  }, [peers]);
 
   return (
     <section id="peer-matrix" className="peers-section">
       <div className="container">
-        
-        <Reveal>
-          <div className="section-head text-center">
-            <span className="section-eyebrow">
-              <Layers className="icon-xs" /> INSTITUTIONAL EQUITY BENCHMARKING
-            </span>
-            <h2 className="section-title">
-              FinTech Peer Multiples &amp; Operating Scorecard
-            </h2>
-            <p className="section-sub max-w-3xl mx-auto">
-              Comparing CRED against listed public market peers (Paytm, PB Fintech, Zomato) and unlisted scale benchmarks on EV/Revenue multiples, Rule of 40 scorecard, ARPU density, and unit economics.
-            </p>
+        <Reveal className="section-head">
+          <div className="editorial-kicker">
+            <span>06</span>
+            <span aria-hidden="true">·</span>
+            <span>Institutional Equity Benchmarking</span>
           </div>
+          <h2>FinTech Peer Multiples &amp; Operating Scorecard</h2>
+          <p>
+            Comparing CRED against listed Indian fintech comparables (Paytm, PB Fintech, Zomato) and global scale
+            benchmarks on live EV/Revenue multiples, ARPU density, and LTV/CAC efficiency.
+          </p>
         </Reveal>
 
-        <Reveal delay={0.1}>
+        <Reveal delay={80}>
           <div className="peers-table-card">
             <div className="table-top-bar">
               <div className="table-title">
                 <BarChart2 className="icon-sm text-cyan" />
-                <span>VALUATION &amp; OPERATING COMP MATRIX (INR &amp; USD NORMALIZED)</span>
+                <span>Valuation &amp; Operating Comp Matrix (INR &amp; USD Normalized)</span>
               </div>
-              <div className="table-legend-pills">
-                <span className="legend-chip highlight-target">Target Case Study</span>
-                <span className="legend-chip">Listed Comparables</span>
-                <span className="legend-chip">Global Benchmarks</span>
+              <div className="table-legend-inline">
+                <span className="legend-inline-item text-green">Case Study Subject</span>
+                <span aria-hidden="true">·</span>
+                <span className="legend-inline-item">Click any tracked ticker to inspect live chart</span>
               </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="peer-comp-table">
+              <table className="peer-comp-table tabular-nums">
                 <thead>
                   <tr>
-                    <th>COMPANY &amp; SYMBOL</th>
-                    <th>MARKET / ASSET</th>
-                    <th>EV / CAP (USD)</th>
-                    <th>ANNUAL REV</th>
-                    <th>YOY GROWTH</th>
-                    <th>EV / REV</th>
-                    <th>ANNUAL ARPU</th>
-                    <th>GROSS MARGIN</th>
+                    <th>Company &amp; Symbol</th>
+                    <th>Market / Asset</th>
+                    <th>Share Price</th>
+                    <th>EV / Cap (USD)</th>
+                    <th>Annual Rev</th>
+                    <th>YoY Growth</th>
+                    <th>EV / Rev</th>
+                    <th>Annual ARPU</th>
+                    <th>Gross Margin</th>
                     <th>LTV / CAC</th>
-                    <th>AUDIENCE GATE</th>
+                    <th>Audience Gate</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -187,10 +166,21 @@ export default function PeerComparisonMatrix({ peers = [], selectedSymbol, onSel
                         <td className="company-cell">
                           <div className="comp-name-box">
                             <span className="comp-title">{comp.name}</span>
-                            <span className="comp-ticker font-mono">{comp.symbol}</span>
+                            {comp.trackable && onSelectSymbol ? (
+                              <a
+                                href="#trading-terminal"
+                                onClick={() => onSelectSymbol(comp.symbol)}
+                                className="comp-ticker comp-ticker-link font-mono"
+                              >
+                                {comp.symbol} ↗
+                              </a>
+                            ) : (
+                              <span className="comp-ticker font-mono">{comp.symbol}</span>
+                            )}
                           </div>
                         </td>
                         <td className="font-mono text-muted">{comp.market}</td>
+                        <td className="font-mono font-semibold text-ink">{comp.price}</td>
                         <td className="font-mono font-bold text-gold">{comp.marketCapUsd}</td>
                         <td className="font-mono text-cyan">{comp.revenueCr}</td>
                         <td className="font-mono text-green">{comp.revGrowthYoY}</td>
@@ -212,33 +202,33 @@ export default function PeerComparisonMatrix({ peers = [], selectedSymbol, onSel
               </table>
             </div>
 
-            {/* Strategic Takeaway footer inside table card */}
             <div className="peer-matrix-footer">
               <div className="insight-grid">
                 <div className="insight-box">
                   <div className="insight-title text-green">ARPU Asymmetry (₹2,150)</div>
                   <p className="insight-desc">
-                    CRED's gated model delivers an annual ARPU that is <strong>7x higher than Paytm (₹310)</strong> and <strong>22x higher than generic UPI apps</strong>, proving the economic power of gating for prime transactors.
+                    CRED&rsquo;s gated model delivers an annual ARPU <strong>7x higher than Paytm (₹310)</strong> and{" "}
+                    <strong>22x higher than generic UPI apps</strong>, demonstrating the yield of prime transactors.
                   </p>
                 </div>
                 <div className="insight-box">
-                  <div className="insight-title text-gold">Multiple Realignment (13.8x EV/Rev)</div>
+                  <div className="insight-title text-gold">Multiple Realignment (~13.7x EV/Rev)</div>
                   <p className="insight-desc">
-                    Following Meta’s $900M Series H, CRED’s 13.8x EV/Revenue multiple trades at a premium over pure-play payments while maintaining parity with high-growth platforms like Zomato (15.1x) and PB Fintech (20.2x).
+                    Following Meta&rsquo;s $900M Series H, CRED&rsquo;s EV/Revenue multiple trades at a premium over
+                    pure-play payments while remaining below PB Fintech (20.2x) and Zomato (15.1x).
                   </p>
                 </div>
                 <div className="insight-box">
                   <div className="insight-title text-cyan">LTV / CAC Superiority (25.4x)</div>
                   <p className="insight-desc">
-                    With high-trust borrowers driving cross-sell into CRED Cash and Kuvera Direct MFs, CRED's LTV/CAC ratio of 25.4x rivals global neo-banking gold standard Nubank (30x+).
+                    With high-trust borrowers cross-selling into CRED Cash and Kuvera Direct MFs, CRED&rsquo;s 25.4x
+                    LTV/CAC approaches global neo-banking benchmark Nubank (30x+).
                   </p>
                 </div>
               </div>
             </div>
-
           </div>
         </Reveal>
-
       </div>
     </section>
   );

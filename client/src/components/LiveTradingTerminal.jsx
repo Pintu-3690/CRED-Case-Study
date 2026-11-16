@@ -1,15 +1,11 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { 
-  TrendingUp, TrendingDown, Activity, Zap, Shield, Clock, 
-  BarChart3, RefreshCw, Layers, Sliders, ChevronDown, Check,
-  Radio, Eye, AlertCircle, ArrowUpRight, ArrowDownRight, Compass
+import {
+  Activity, Zap, Layers, BarChart3, Radio,
+  ArrowUpRight, ArrowDownRight, Briefcase, RotateCcw
 } from "lucide-react";
 import Reveal from "./Reveal";
 
-export default function LiveTradingTerminal({
-  tradingState = {},
-  onSelectSymbol
-}) {
+export default function LiveTradingTerminal({ tradingState = {} }) {
   const {
     selectedSymbol = "CRED:UNLST",
     changeSymbol = () => {},
@@ -19,18 +15,25 @@ export default function LiveTradingTerminal({
       assetClass: "Unlisted Secondary Equity / OTC Series H",
       price: 284.50,
       currency: "INR",
-      change: +3.85,
-      pctChange: +1.37,
+      change: 3.85,
+      pctChange: 1.37,
       high24h: 288.90,
       low24h: 279.80,
       open24h: 280.65,
       prevClose: 280.65,
       volume24h: 428950,
       vwap: 284.12,
-      impliedMarketCapUsd: 4.50,
+      lotSize: 50,
+      impliedMarketCapUsd: 4.30,
+      impliedMarketCapInrCr: 37565,
       sharesOutstandingM: 1320.4,
       timestamp: Date.now()
     },
+    credQuote = {
+      price: 284.50,
+      sharesOutstandingM: 1320.4
+    },
+    usdInrRate = 87.42,
     peers = [],
     orderBook = {
       symbol: "CRED:UNLST",
@@ -48,22 +51,21 @@ export default function LiveTradingTerminal({
       activeConnections: 1,
       engineLatencyMs: 0.8,
       ticksProcessed: 1420,
-      matchingEngine: "V8 Real-Time L2 Order Router",
+      matchingEngine: "OTC Secondary Order Router",
       settlementCycle: "T+1 OTC Escrow",
       dailyTpvCr: 2489.42,
       upiVelocityTps: 214,
-      currentImpliedValuationB: 4.50
+      currentImpliedValuationB: 4.30
     },
     isConnected = false,
     lastTickSide = "neutral",
     tickFlash = false,
     candles = [],
     resolution = "1D",
-    changeResolution = () => {},
-    isLoadingCandles = false
+    changeResolution = () => {}
   } = tradingState || {};
 
-  const [chartMode, setChartMode] = useState("CANDLE"); // "CANDLE", "AREA", "DEPTH"
+  const [chartMode, setChartMode] = useState("CANDLE");
   const [activeIndicators, setActiveIndicators] = useState({
     sma20: true,
     ema50: false,
@@ -72,12 +74,22 @@ export default function LiveTradingTerminal({
     volume: true
   });
   const [newsFilter, setNewsFilter] = useState("ALL");
-  const [hoveredCandle, setHoveredCandle] = useState(null);
+  const [hoveredInfo, setHoveredInfo] = useState(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 480 });
+
+  // Interactive CRED OTC Order & Position Desk State
+  const [orderSide, setOrderSide] = useState("BUY");
+  const [orderType, setOrderType] = useState("MARKET");
+  const [lotCount, setLotCount] = useState(2); // 1 Lot = 50 shares
+  const [limitPrice, setLimitPrice] = useState(284.50);
+  const [position, setPosition] = useState({ shares: 500, avgCost: 271.20 });
+  const [orderNotice, setOrderNotice] = useState("");
 
   const canvasRef = useRef(null);
+  const wrapperRef = useRef(null);
 
   const resolutionsList = [
-    { id: "1s", label: "1s Live" },
+    { id: "1s", label: "1s" },
     { id: "5s", label: "5s" },
     { id: "1m", label: "1m" },
     { id: "15m", label: "15m" },
@@ -91,7 +103,21 @@ export default function LiveTradingTerminal({
     setActiveIndicators((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // Technical Indicators Calculation (SMA, EMA, Bollinger, RSI)
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setCanvasSize({ width, height });
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const computedData = useMemo(() => {
     if (!Array.isArray(candles) || candles.length === 0) {
       return { candles: [], sma20: [], ema: [], bUpper: [], bLower: [], rsi: [] };
@@ -100,7 +126,6 @@ export default function LiveTradingTerminal({
     const closes = candles.map((c) => c.close || c.price || 0);
     const n = closes.length;
 
-    // SMA 20
     const sma20 = [];
     for (let i = 0; i < n; i++) {
       if (i < 19) {
@@ -112,7 +137,6 @@ export default function LiveTradingTerminal({
       }
     }
 
-    // EMA 50 (or smaller if fewer candles)
     const emaPeriod = Math.min(20, Math.max(5, Math.floor(n / 3)));
     const k = 2 / (emaPeriod + 1);
     const ema = [];
@@ -121,13 +145,12 @@ export default function LiveTradingTerminal({
       if (i === 0) {
         ema.push(prevEma);
       } else {
-        const currentEma = (closes[i] * k) + (prevEma * (1 - k));
+        const currentEma = closes[i] * k + prevEma * (1 - k);
         ema.push(Number(currentEma.toFixed(2)));
         prevEma = currentEma;
       }
     }
 
-    // Bollinger Bands (20, 2)
     const bUpper = [];
     const bLower = [];
     for (let i = 0; i < n; i++) {
@@ -144,7 +167,6 @@ export default function LiveTradingTerminal({
       }
     }
 
-    // RSI 14
     const rsi = [];
     let gains = 0;
     let losses = 0;
@@ -161,7 +183,7 @@ export default function LiveTradingTerminal({
           const avgGain = gains / 14;
           const avgLoss = losses / 14;
           const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-          rsi.push(Number((100 - (100 / (1 + rs))).toFixed(1)));
+          rsi.push(Number((100 - 100 / (1 + rs)).toFixed(1)));
         } else {
           rsi.push(50);
         }
@@ -171,53 +193,49 @@ export default function LiveTradingTerminal({
         gains = (gains * 13 + currentGain) / 14;
         losses = (losses * 13 + currentLoss) / 14;
         const rs = losses === 0 ? 100 : gains / losses;
-        rsi.push(Number((100 - (100 / (1 + rs))).toFixed(1)));
+        rsi.push(Number((100 - 100 / (1 + rs)).toFixed(1)));
       }
     }
 
     return { candles, sma20, ema, bUpper, bLower, rsi };
   }, [candles]);
 
-  // High-Precision HTML5 Canvas Render Loop for Candlestick & Trading Overlays
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Handle high-DPI retina screens
     const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
+    const width = rect.width || canvasSize.width;
+    const height = rect.height || canvasSize.height;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
     ctx.scale(dpr, dpr);
 
-    const width = rect.width;
-    const height = rect.height;
-
-    // Background
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = "#0c0d12";
+    ctx.fillStyle = "#0a0c10";
     ctx.fillRect(0, 0, width, height);
 
     const data = computedData.candles;
     if (!data || data.length === 0) {
-      ctx.fillStyle = "#656874";
-      ctx.font = "13px 'JetBrains Mono', monospace";
+      ctx.fillStyle = "#8a8d9a";
+      ctx.font = "12px 'JetBrains Mono', monospace";
       ctx.textAlign = "center";
-      ctx.fillText("Loading Real-Time Order Stream & Candlesticks...", width / 2, height / 2);
+      ctx.fillText("Connecting to real-time market feed...", width / 2, height / 2);
       return;
     }
 
-    // Determine layout splits (Main chart 75%, RSI indicator subpanel 25% if active)
     const showRsi = activeIndicators.rsi;
-    const mainHeight = showRsi ? height * 0.74 : height - 28;
-    const rsiTop = showRsi ? height * 0.77 : height;
-    const rsiHeight = height - rsiTop - 18;
-    const rightMargin = 72; // for price axis
-    const chartWidth = width - rightMargin;
+    const timeAxisHeight = 24;
+    const usableHeight = height - timeAxisHeight;
+    const mainHeight = showRsi ? usableHeight * 0.74 : usableHeight - 8;
+    const rsiTop = showRsi ? usableHeight * 0.77 : usableHeight;
+    const rsiHeight = usableHeight - rsiTop - 8;
+    const rightMargin = 78;
+    const chartWidth = Math.max(100, width - rightMargin);
 
-    // Find price min/max
     let minPrice = Infinity;
     let maxPrice = -Infinity;
     let maxVolume = 0;
@@ -229,21 +247,22 @@ export default function LiveTradingTerminal({
     });
 
     if (computedData?.bUpper?.length > 0 && activeIndicators.bollinger) {
-      computedData.bUpper.forEach((val) => { if (val) maxPrice = Math.max(maxPrice, val); });
-      computedData.bLower.forEach((val) => { if (val) minPrice = Math.min(minPrice, val); });
+      computedData.bUpper.forEach((val) => {
+        if (val) maxPrice = Math.max(maxPrice, val);
+      });
+      computedData.bLower.forEach((val) => {
+        if (val) minPrice = Math.min(minPrice, val);
+      });
     }
 
-    // Add 4% padding top and bottom
-    const priceRange = Math.max(1, maxPrice - minPrice);
-    const paddedMin = minPrice - priceRange * 0.05;
-    const paddedMax = maxPrice + priceRange * 0.05;
+    const priceRange = Math.max(0.5, maxPrice - minPrice);
+    const paddedMin = minPrice - priceRange * 0.08;
+    const paddedMax = maxPrice + priceRange * 0.08;
     const paddedRange = paddedMax - paddedMin;
 
-    const getY = (price) => {
-      return mainHeight - ((price - paddedMin) / paddedRange) * mainHeight;
-    };
+    const getY = (price) => mainHeight - ((price - paddedMin) / paddedRange) * mainHeight;
 
-    // Draw Price Grid Lines
+    // Horizontal Grid & Price Axis
     ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
     ctx.lineWidth = 1;
     const gridSteps = 5;
@@ -256,43 +275,64 @@ export default function LiveTradingTerminal({
       ctx.lineTo(chartWidth, y);
       ctx.stroke();
 
-      // Price Axis Label
-      ctx.fillStyle = "#8a8d9a";
+      ctx.fillStyle = "#8a8f9e";
       ctx.font = "11px 'JetBrains Mono', monospace";
       ctx.textAlign = "left";
       ctx.fillText(priceLevel.toFixed(2), chartWidth + 8, y + 4);
     }
 
-    // Horizontal Price Separator
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+    // Right Price Axis Divider
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
     ctx.beginPath();
     ctx.moveTo(chartWidth, 0);
-    ctx.lineTo(chartWidth, height);
+    ctx.lineTo(chartWidth, usableHeight);
     ctx.stroke();
 
     const n = data.length;
     const candleSlotWidth = chartWidth / n;
-    const candleWidth = Math.max(2, Math.min(16, candleSlotWidth * 0.7));
+    const candleWidth = Math.max(2, Math.min(14, candleSlotWidth * 0.66));
 
-    // Draw Volume Profile at bottom of main chart if enabled
+    // Vertical Time Grid & Bottom Time Axis Labels
+    const labelCount = Math.min(6, Math.max(3, Math.floor(chartWidth / 120)));
+    const step = Math.max(1, Math.floor(n / labelCount));
+    ctx.fillStyle = "#7a8090";
+    ctx.font = "10.5px 'JetBrains Mono', monospace";
+    ctx.textAlign = "center";
+
+    for (let idx = 0; idx < n; idx += step) {
+      const x = idx * candleSlotWidth + candleSlotWidth / 2;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.03)";
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, usableHeight);
+      ctx.stroke();
+
+      const d = new Date(data[idx].time);
+      const label =
+        resolution === "1D" || resolution === "1W" || resolution === "1Y" || resolution === "ALL"
+          ? d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })
+          : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      ctx.fillText(label, Math.min(chartWidth - 28, Math.max(28, x)), height - 7);
+    }
+
+    // Volume Bars
     if (activeIndicators.volume && maxVolume > 0) {
-      const maxVolHeight = mainHeight * 0.22;
+      const maxVolHeight = mainHeight * 0.2;
       data.forEach((c, idx) => {
         const x = idx * candleSlotWidth + candleSlotWidth / 2;
         const vHeight = (c.volume / maxVolume) * maxVolHeight;
         const vY = mainHeight - vHeight;
         const isGreen = c.close >= c.open;
-
-        ctx.fillStyle = isGreen ? "rgba(0, 223, 130, 0.18)" : "rgba(255, 51, 85, 0.18)";
+        ctx.fillStyle = isGreen ? "rgba(16, 185, 129, 0.18)" : "rgba(239, 68, 68, 0.18)";
         ctx.fillRect(x - candleWidth / 2, vY, candleWidth, vHeight);
       });
     }
 
-    // Draw Area Chart Mode
+    // Area Series
     if (chartMode === "AREA") {
       const gradient = ctx.createLinearGradient(0, 0, 0, mainHeight);
-      gradient.addColorStop(0, "rgba(0, 223, 130, 0.35)");
-      gradient.addColorStop(1, "rgba(0, 223, 130, 0.00)");
+      gradient.addColorStop(0, "rgba(16, 185, 129, 0.28)");
+      gradient.addColorStop(1, "rgba(16, 185, 129, 0.0)");
 
       ctx.beginPath();
       data.forEach((c, idx) => {
@@ -301,15 +341,12 @@ export default function LiveTradingTerminal({
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       });
-
-      // Fill area
       ctx.lineTo((n - 1) * candleSlotWidth + candleSlotWidth / 2, mainHeight);
       ctx.lineTo(candleSlotWidth / 2, mainHeight);
       ctx.closePath();
       ctx.fillStyle = gradient;
       ctx.fill();
 
-      // Stroke line
       ctx.beginPath();
       data.forEach((c, idx) => {
         const x = idx * candleSlotWidth + candleSlotWidth / 2;
@@ -317,12 +354,12 @@ export default function LiveTradingTerminal({
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       });
-      ctx.strokeStyle = "#00df82";
+      ctx.strokeStyle = "#10b981";
       ctx.lineWidth = 2;
       ctx.stroke();
     }
 
-    // Draw Candlestick Mode
+    // Candlesticks
     if (chartMode === "CANDLE") {
       data.forEach((c, idx) => {
         const x = idx * candleSlotWidth + candleSlotWidth / 2;
@@ -335,22 +372,20 @@ export default function LiveTradingTerminal({
         const bodyTop = Math.min(openY, closeY);
         const bodyHeight = Math.max(1.5, Math.abs(closeY - openY));
 
-        ctx.strokeStyle = isUp ? "#00df82" : "#ff3355";
-        ctx.fillStyle = isUp ? "#00df82" : "#ff3355";
+        ctx.strokeStyle = isUp ? "#10b981" : "#ef4444";
+        ctx.fillStyle = isUp ? "#10b981" : "#ef4444";
         ctx.lineWidth = 1.2;
 
-        // Wick line
         ctx.beginPath();
         ctx.moveTo(x, highY);
         ctx.lineTo(x, lowY);
         ctx.stroke();
 
-        // Candle Body
         ctx.fillRect(x - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
       });
     }
 
-    // Draw SMA 20 Overlay
+    // Indicators
     if (activeIndicators.sma20 && computedData.sma20) {
       ctx.beginPath();
       let started = false;
@@ -361,16 +396,13 @@ export default function LiveTradingTerminal({
         if (!started) {
           ctx.moveTo(x, y);
           started = true;
-        } else {
-          ctx.lineTo(x, y);
-        }
+        } else ctx.lineTo(x, y);
       });
-      ctx.strokeStyle = "#ffd700"; // Gold
+      ctx.strokeStyle = "#d4af37";
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
 
-    // Draw EMA 50 Overlay
     if (activeIndicators.ema50 && computedData.ema) {
       ctx.beginPath();
       computedData.ema.forEach((val, idx) => {
@@ -379,46 +411,47 @@ export default function LiveTradingTerminal({
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       });
-      ctx.strokeStyle = "#00e5ff"; // Electric Cyan
+      ctx.strokeStyle = "#38bdf8";
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
 
-    // Draw Bollinger Bands (Upper/Lower)
     if (activeIndicators.bollinger && computedData.bUpper && computedData.bLower) {
-      // Upper band
       ctx.beginPath();
       let sUp = false;
       computedData.bUpper.forEach((val, idx) => {
         if (!val) return;
         const x = idx * candleSlotWidth + candleSlotWidth / 2;
         const y = getY(val);
-        if (!sUp) { ctx.moveTo(x, y); sUp = true; }
-        else ctx.lineTo(x, y);
+        if (!sUp) {
+          ctx.moveTo(x, y);
+          sUp = true;
+        } else ctx.lineTo(x, y);
       });
-      ctx.strokeStyle = "rgba(179, 136, 255, 0.7)";
+      ctx.strokeStyle = "rgba(167, 139, 250, 0.7)";
       ctx.setLineDash([4, 4]);
       ctx.stroke();
 
-      // Lower band
       ctx.beginPath();
       let sLow = false;
       computedData.bLower.forEach((val, idx) => {
         if (!val) return;
         const x = idx * candleSlotWidth + candleSlotWidth / 2;
         const y = getY(val);
-        if (!sLow) { ctx.moveTo(x, y); sLow = true; }
-        else ctx.lineTo(x, y);
+        if (!sLow) {
+          ctx.moveTo(x, y);
+          sLow = true;
+        } else ctx.lineTo(x, y);
       });
-      ctx.strokeStyle = "rgba(179, 136, 255, 0.7)";
       ctx.stroke();
       ctx.setLineDash([]);
     }
 
-    // Current Price Pulse Line
+    // Current Live Price Line
     const currentPrice = quote.price;
-    const currentY = getY(currentPrice);
-    ctx.strokeStyle = lastTickSide === "up" ? "#00df82" : lastTickSide === "down" ? "#ff3355" : "#ffd700";
+    const currentY = Math.min(mainHeight - 10, Math.max(10, getY(currentPrice)));
+    const priceTagColor = lastTickSide === "up" ? "#10b981" : lastTickSide === "down" ? "#ef4444" : "#d4af37";
+    ctx.strokeStyle = priceTagColor;
     ctx.setLineDash([3, 3]);
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -427,28 +460,41 @@ export default function LiveTradingTerminal({
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Current Price Badge on Right Axis
-    ctx.fillStyle = lastTickSide === "up" ? "#00df82" : lastTickSide === "down" ? "#ff3355" : "#ffd700";
+    ctx.fillStyle = priceTagColor;
     ctx.fillRect(chartWidth, currentY - 10, rightMargin, 20);
-    ctx.fillStyle = "#000000";
+    ctx.fillStyle = "#08090c";
     ctx.font = "bold 11px 'JetBrains Mono', monospace";
     ctx.textAlign = "left";
-    ctx.fillText(` ${currentPrice.toFixed(2)}`, chartWidth + 4, currentY + 4);
+    ctx.fillText(` ${currentPrice.toFixed(2)}`, chartWidth + 6, currentY + 4);
 
-    // Render RSI Indicator Sub-panel
+    // Crosshair Overlay when hovering
+    if (hoveredInfo && hoveredInfo.idx >= 0 && hoveredInfo.idx < n) {
+      const cx = hoveredInfo.idx * candleSlotWidth + candleSlotWidth / 2;
+      const cy = Math.min(mainHeight, Math.max(0, hoveredInfo.y));
+
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+      ctx.setLineDash([3, 3]);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx, 0);
+      ctx.lineTo(cx, usableHeight);
+      ctx.moveTo(0, cy);
+      ctx.lineTo(chartWidth, cy);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Bottom RSI Sub-chart
     if (showRsi && computedData.rsi) {
-      // Subpanel background
-      ctx.fillStyle = "#090a0e";
-      ctx.fillRect(0, rsiTop, width, rsiHeight + 18);
+      ctx.fillStyle = "#08090d";
+      ctx.fillRect(0, rsiTop, width, rsiHeight + 8);
 
-      // Separator
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
       ctx.beginPath();
       ctx.moveTo(0, rsiTop);
       ctx.lineTo(width, rsiTop);
       ctx.stroke();
 
-      // RSI Overbought (70) and Oversold (30) levels
       const rsiY70 = rsiTop + rsiHeight * 0.3;
       const rsiY30 = rsiTop + rsiHeight * 0.7;
 
@@ -462,13 +508,13 @@ export default function LiveTradingTerminal({
       ctx.stroke();
       ctx.setLineDash([]);
 
-      ctx.fillStyle = "#8a8d9a";
+      ctx.fillStyle = "#8a8f9e";
       ctx.font = "10px 'JetBrains Mono', monospace";
-      ctx.fillText("70 (OB)", chartWidth + 6, rsiY70 + 3);
-      ctx.fillText("30 (OS)", chartWidth + 6, rsiY30 + 3);
+      ctx.textAlign = "left";
+      ctx.fillText("70 OB", chartWidth + 6, rsiY70 + 3);
+      ctx.fillText("30 OS", chartWidth + 6, rsiY30 + 3);
       ctx.fillText("RSI(14)", 10, rsiTop + 14);
 
-      // RSI Curve
       ctx.beginPath();
       computedData.rsi.forEach((rVal, idx) => {
         const x = idx * candleSlotWidth + candleSlotWidth / 2;
@@ -476,34 +522,86 @@ export default function LiveTradingTerminal({
         if (idx === 0) ctx.moveTo(x, rY);
         else ctx.lineTo(x, rY);
       });
-      ctx.strokeStyle = "#b388ff";
+      ctx.strokeStyle = "#a78bfa";
       ctx.lineWidth = 1.6;
       ctx.stroke();
     }
 
-  }, [computedData, chartMode, activeIndicators, quote.price, lastTickSide]);
+    // Time axis separator line
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+    ctx.beginPath();
+    ctx.moveTo(0, usableHeight);
+    ctx.lineTo(width, usableHeight);
+    ctx.stroke();
+  }, [computedData, chartMode, activeIndicators, quote.price, lastTickSide, canvasSize, hoveredInfo, resolution]);
 
-  // Handle canvas mouse move for interactive crosshair & OHLC tooltip
   const handleMouseMove = (e) => {
     const canvas = canvasRef.current;
     if (!canvas || !computedData?.candles?.length) return;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const chartWidth = rect.width - 72;
+    const y = e.clientY - rect.top;
+    const chartWidth = rect.width - 78;
     const slotWidth = chartWidth / computedData.candles.length;
     const idx = Math.floor(x / slotWidth);
     if (idx >= 0 && idx < computedData.candles.length) {
-      setHoveredCandle(computedData.candles[idx]);
+      setHoveredInfo({ idx, y, candle: computedData.candles[idx] });
     }
   };
 
   const handleMouseLeave = () => {
-    setHoveredCandle(null);
+    setHoveredInfo(null);
   };
 
   const isPositive = quote.change >= 0;
 
-  // Filter news
+  // Order book bid/ask imbalance percentages (always sum to 100%)
+  const bidPct = Math.min(90, Math.max(10, Math.round(50 + (orderBook.imbalance || 0) * 50)));
+  const askPct = 100 - bidPct;
+
+  // Interactive CRED OTC Desk Calculations (linked directly to live CRED:UNLST price)
+  const credLivePrice = credQuote?.price || 284.50;
+  const lotSize = 50;
+  const selectedSharesCount = Math.max(lotSize, lotCount * lotSize);
+  const effectiveFillPrice = orderType === "LIMIT" ? Math.max(50, Number(limitPrice) || credLivePrice) : credLivePrice;
+  const otcOrderInr = selectedSharesCount * effectiveFillPrice;
+  const otcOrderUsd = otcOrderInr / usdInrRate;
+  const credTotalShares = (credQuote?.sharesOutstandingM || 1320.4) * 1_000_000;
+  const equityStakePct = (selectedSharesCount / credTotalShares) * 100;
+
+  // Live Simulated Position P&L
+  const positionMarketVal = position.shares * credLivePrice;
+  const positionCostBasis = position.shares * position.avgCost;
+  const positionPnlInr = positionMarketVal - positionCostBasis;
+  const positionPnlPct = positionCostBasis > 0 ? (positionPnlInr / positionCostBasis) * 100 : 0;
+
+  const handlePrefillLimitPrice = (price, side) => {
+    setOrderType("LIMIT");
+    setOrderSide(side);
+    setLimitPrice(Number(price.toFixed(2)));
+    setOrderNotice(`Loaded ₹${price.toFixed(2)} ${side === "BUY" ? "Bid" : "Ask"} level from Order Book.`);
+  };
+
+  const handleExecuteSimulatedOrder = () => {
+    if (orderSide === "BUY") {
+      const nextShares = position.shares + selectedSharesCount;
+      const nextCost = (position.shares * position.avgCost + otcOrderInr) / nextShares;
+      setPosition({ shares: nextShares, avgCost: nextCost });
+      setOrderNotice(`Filled BUY ${selectedSharesCount.toLocaleString("en-IN")} CRED @ ₹${effectiveFillPrice.toFixed(2)}`);
+    } else {
+      if (position.shares === 0) {
+        setOrderNotice("No simulated CRED shares held to sell.");
+        return;
+      }
+      const sellQty = Math.min(position.shares, selectedSharesCount);
+      setPosition((prev) => ({
+        shares: prev.shares - sellQty,
+        avgCost: prev.shares - sellQty === 0 ? 0 : prev.avgCost
+      }));
+      setOrderNotice(`Filled SELL ${sellQty.toLocaleString("en-IN")} CRED @ ₹${effectiveFillPrice.toFixed(2)}`);
+    }
+  };
+
   const filteredNews = useMemo(() => {
     if (!news) return [];
     if (newsFilter === "ALL") return news;
@@ -513,124 +611,134 @@ export default function LiveTradingTerminal({
   return (
     <section id="trading-terminal" className="terminal-section">
       <div className="container">
-        
-        {/* Terminal Header & Real-Time Telemetry Bar */}
         <Reveal>
           <div className="terminal-masthead">
             <div className="masthead-left">
-              <div className="terminal-badge">
-                <span className="pulse-dot"></span>
-                <span>INSTITUTIONAL OTC TRADING DESK</span>
+              <div className="editorial-kicker">
+                <span>02</span>
+                <span aria-hidden="true">·</span>
+                <span>Institutional Secondary Market Desk</span>
               </div>
               <h2 className="terminal-title">
-                Real-Time Market Terminal &amp; Price Action
+                Live CRED Market Price &amp; Multi-Asset Tape
               </h2>
               <p className="terminal-subtitle">
-                Sub-second level tick streaming, Level 2 order book depth, Time &amp; Sales tape, and multi-asset fintech valuation comps for Dreamplug Technologies (CRED).
+                Real-time OTC secondary feed for Dreamplug Technologies (CRED:UNLST) alongside listed Indian fintech benchmarks.
               </p>
             </div>
 
             <div className="masthead-right">
-              <div className="engine-stat-pill">
-                <Radio className={`icon-sm ${isConnected ? "text-green" : "text-red animate-pulse"}`} />
-                <span>Engine: <strong>{telemetry.matchingEngine}</strong></span>
-                <span className="divider">|</span>
-                <span>Latency: <strong>{telemetry.engineLatencyMs} ms</strong></span>
-                <span className="divider">|</span>
-                <span className="badge-settle">{telemetry.settlementCycle}</span>
+              <div className="engine-stat-bar tabular-nums">
+                <span className={`live-indicator-dot ${isConnected ? "connected" : "disconnected"}`} />
+                <Radio className={`icon-sm ${isConnected ? "text-green" : "text-red"}`} />
+                <span>{isConnected ? "SSE Stream Active" : "Reconnecting"}</span>
+                <span className="divider" aria-hidden="true">·</span>
+                <span>{telemetry.engineLatencyMs} ms</span>
+                <span className="divider" aria-hidden="true">·</span>
+                <span>{telemetry.settlementCycle}</span>
               </div>
             </div>
           </div>
         </Reveal>
 
         {/* Multi-Asset Ticker Switcher Bar */}
-        <Reveal delay={0.05}>
+        <Reveal delay={40}>
           <div className="ticker-switcher-bar">
-            <div className="switcher-label">MARKET ASSETS:</div>
+            <div className="switcher-label">Tracked Assets</div>
             <div className="ticker-scroll">
-              {peers && peers.map((p) => {
-                const isSelected = selectedSymbol === p.symbol;
-                const isUp = p.change >= 0;
-                return (
-                  <button
-                    key={p.symbol}
-                    onClick={() => changeSymbol(p.symbol)}
-                    className={`ticker-chip ${isSelected ? "active" : ""}`}
-                  >
-                    <div className="chip-header">
-                      <span className="chip-symbol">{p.symbol}</span>
-                      <span className={`chip-badge ${isUp ? "positive" : "negative"}`}>
-                        {isUp ? "+" : ""}{p.pctChange}%
-                      </span>
-                    </div>
-                    <div className="chip-price">
-                      {p.currency === "INR" ? "₹" : "$"}{p.price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                    </div>
-                  </button>
-                );
-              })}
+              {peers &&
+                peers.map((p) => {
+                  const isSelected = selectedSymbol === p.symbol;
+                  const isUp = p.change >= 0;
+                  return (
+                    <button
+                      key={p.symbol}
+                      onClick={() => changeSymbol(p.symbol)}
+                      className={`ticker-chip ${isSelected ? "active" : ""}`}
+                    >
+                      <div className="chip-header">
+                        <span className="chip-symbol">{p.symbol}</span>
+                        <span className={`chip-badge tabular-nums ${isUp ? "positive" : "negative"}`}>
+                          {isUp ? "+" : ""}{p.pctChange.toFixed(2)}%
+                        </span>
+                      </div>
+                      <div className="chip-price tabular-nums">
+                        {p.currency === "INR" ? "₹" : "$"}
+                        {p.price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      </div>
+                    </button>
+                  );
+                })}
             </div>
           </div>
         </Reveal>
 
-        {/* Main Terminal Grid: Chart Center (Left/Center) + Order Book & Tape (Right) */}
-        <Reveal delay={0.1}>
+        {/* Main Terminal Grid */}
+        <Reveal delay={80}>
           <div className="terminal-grid">
-
-            {/* Left Column: Primary Chart & Indicators */}
+            {/* Left: Chart & Live Quote */}
             <div className="terminal-main-deck">
-              
-              {/* Primary Quote Bar */}
               <div className="quote-bar">
                 <div className="quote-primary">
                   <div className="quote-symbol-row">
                     <span className="quote-symbol">{quote.symbol}</span>
-                    <span className="quote-asset-class">{quote.assetClass}</span>
+                    <span className="quote-asset-name">{quote.name}</span>
                     {tickFlash && (
                       <span className={`tick-flash-badge ${lastTickSide === "up" ? "flash-green" : "flash-red"}`}>
-                        {lastTickSide === "up" ? "▲ TICK UP" : "▼ TICK DOWN"}
+                        {lastTickSide === "up" ? "UP" : "DOWN"}
                       </span>
                     )}
                   </div>
                   <div className="quote-price-row">
-                    <span className={`quote-large-price ${lastTickSide === "up" ? "price-tick-green" : lastTickSide === "down" ? "price-tick-red" : ""}`}>
-                      ₹{quote.price.toFixed(2)}
+                    <span
+                      className={`quote-large-price tabular-nums ${
+                        lastTickSide === "up" ? "price-tick-green" : lastTickSide === "down" ? "price-tick-red" : ""
+                      }`}
+                    >
+                      ₹{quote.price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </span>
-                    <div className={`quote-change-box ${isPositive ? "change-up" : "change-down"}`}>
+                    <div className={`quote-change-box tabular-nums ${isPositive ? "change-up" : "change-down"}`}>
                       {isPositive ? <ArrowUpRight className="icon-md" /> : <ArrowDownRight className="icon-md" />}
-                      <span>{isPositive ? "+" : ""}{quote.change.toFixed(2)} ({isPositive ? "+" : ""}{quote.pctChange}%)</span>
+                      <span>
+                        {isPositive ? "+" : ""}{quote.change.toFixed(2)} ({isPositive ? "+" : ""}
+                        {quote.pctChange.toFixed(2)}%)
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Key Metrics Quick Ribbon */}
-                <div className="quote-metrics-ribbon">
+                <div className="quote-metrics-ribbon tabular-nums">
                   <div className="metric-cell">
-                    <span className="cell-label">24H HIGH</span>
+                    <span className="cell-label">24H High</span>
                     <span className="cell-val text-green">₹{quote.high24h.toFixed(2)}</span>
                   </div>
                   <div className="metric-cell">
-                    <span className="cell-label">24H LOW</span>
+                    <span className="cell-label">24H Low</span>
                     <span className="cell-val text-red">₹{quote.low24h.toFixed(2)}</span>
                   </div>
                   <div className="metric-cell">
                     <span className="cell-label">VWAP</span>
                     <span className="cell-val text-cyan">₹{quote.vwap.toFixed(2)}</span>
                   </div>
-                  <div className="metric-cell">
-                    <span className="cell-label">OTC VOLUME</span>
-                    <span className="cell-val font-mono">{quote.volume24h.toLocaleString("en-IN")} sh</span>
-                  </div>
-                  <div className="metric-cell highlight">
-                    <span className="cell-label">IMPLIED MARKET CAP</span>
-                    <span className="cell-val text-gold">${quote.impliedMarketCapUsd || 4.50}B (₹37,800 Cr)</span>
-                  </div>
+                  {quote.volume24h > 0 && (
+                    <div className="metric-cell">
+                      <span className="cell-label">24H Volume</span>
+                      <span className="cell-val font-mono">{quote.volume24h.toLocaleString("en-IN")}</span>
+                    </div>
+                  )}
+                  {quote.impliedMarketCapUsd > 0 && (
+                    <div className="metric-cell highlight">
+                      <span className="cell-label">Live Market Cap</span>
+                      <span className="cell-val text-gold">
+                        ${quote.impliedMarketCapUsd.toFixed(2)}B (₹{(quote.impliedMarketCapInrCr || 37565).toLocaleString("en-IN")} Cr)
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Chart Controls Bar */}
               <div className="chart-controls-bar">
-                {/* Timeframe selector */}
                 <div className="timeframe-group">
                   {resolutionsList.map((r) => (
                     <button
@@ -643,7 +751,6 @@ export default function LiveTradingTerminal({
                   ))}
                 </div>
 
-                {/* Chart Type Toggle */}
                 <div className="chart-type-group">
                   <button
                     onClick={() => setChartMode("CANDLE")}
@@ -661,7 +768,6 @@ export default function LiveTradingTerminal({
                   </button>
                 </div>
 
-                {/* Indicators Toggles */}
                 <div className="indicators-group">
                   <button
                     onClick={() => toggleIndicator("sma20")}
@@ -679,7 +785,7 @@ export default function LiveTradingTerminal({
                     onClick={() => toggleIndicator("bollinger")}
                     className={`ind-pill ${activeIndicators.bollinger ? "active-purple" : ""}`}
                   >
-                    Bollinger
+                    BBands
                   </button>
                   <button
                     onClick={() => toggleIndicator("rsi")}
@@ -697,16 +803,22 @@ export default function LiveTradingTerminal({
               </div>
 
               {/* Live Canvas Viewport */}
-              <div className="chart-viewport-wrapper">
-                {/* Hovered Candle HUD overlay */}
-                {hoveredCandle && (
-                  <div className="candle-hud">
-                    <span className="hud-time">{new Date(hoveredCandle.time).toLocaleTimeString()}</span>
-                    <span>O: <strong className="font-mono">{hoveredCandle.open.toFixed(2)}</strong></span>
-                    <span>H: <strong className="font-mono text-green">{hoveredCandle.high.toFixed(2)}</strong></span>
-                    <span>L: <strong className="font-mono text-red">{hoveredCandle.low.toFixed(2)}</strong></span>
-                    <span>C: <strong className="font-mono">{hoveredCandle.close.toFixed(2)}</strong></span>
-                    <span>Vol: <strong className="font-mono text-cyan">{hoveredCandle.volume.toLocaleString()}</strong></span>
+              <div className="chart-viewport-wrapper" ref={wrapperRef}>
+                {hoveredInfo?.candle && (
+                  <div className="candle-hud tabular-nums">
+                    <span className="hud-time">
+                      {new Date(hoveredInfo.candle.time).toLocaleString([], {
+                        month: "short",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit"
+                      })}
+                    </span>
+                    <span>O: <strong className="font-mono">{hoveredInfo.candle.open.toFixed(2)}</strong></span>
+                    <span>H: <strong className="font-mono text-green">{hoveredInfo.candle.high.toFixed(2)}</strong></span>
+                    <span>L: <strong className="font-mono text-red">{hoveredInfo.candle.low.toFixed(2)}</strong></span>
+                    <span>C: <strong className="font-mono">{hoveredInfo.candle.close.toFixed(2)}</strong></span>
+                    <span>Vol: <strong className="font-mono text-cyan">{hoveredInfo.candle.volume.toLocaleString()}</strong></span>
                   </div>
                 )}
 
@@ -718,158 +830,331 @@ export default function LiveTradingTerminal({
                 />
               </div>
 
-              {/* Terminal Legend & Status */}
               <div className="chart-footer-bar">
                 <div className="legend-items">
-                  <span className="legend-item"><span className="legend-dot green"></span> Bullish Candle</span>
-                  <span className="legend-item"><span className="legend-dot red"></span> Bearish Candle</span>
+                  <span className="legend-item"><span className="legend-dot green" /> Bullish</span>
+                  <span className="legend-item"><span className="legend-dot red" /> Bearish</span>
                   {activeIndicators.sma20 && (
-                    <span className="legend-item">
-                      <span className="legend-dot gold"></span> 
+                    <span className="legend-item tabular-nums">
+                      <span className="legend-dot gold" />
                       SMA 20 ({computedData?.sma20?.length ? `₹${computedData.sma20[computedData.sma20.length - 1] || "..."}` : "..."})
                     </span>
                   )}
-                  {activeIndicators.ema50 && <span className="legend-item"><span className="legend-dot cyan"></span> EMA 50</span>}
-                  {activeIndicators.bollinger && <span className="legend-item"><span className="legend-dot purple"></span> BBands (20,2)</span>}
+                  {activeIndicators.ema50 && <span className="legend-item"><span className="legend-dot cyan" /> EMA 50</span>}
+                  {activeIndicators.bollinger && <span className="legend-item"><span className="legend-dot purple" /> BBands (20,2)</span>}
                 </div>
                 <div className="market-note">
-                  Real-time algorithmic Brownian motion &amp; Poisson jump stream
+                  {quote.assetClass} · Click any Order Book level to load price
                 </div>
               </div>
             </div>
 
-            {/* Right Column: Level 2 Order Book & Time and Sales (The Tape) */}
+            {/* Right: Level 2 Order Book, Time & Sales, and Interactive OTC Order & Portfolio Desk */}
             <div className="terminal-side-deck">
-
-              {/* Level 2 Order Book Section */}
               <div className="terminal-panel orderbook-panel">
                 <div className="panel-header">
                   <div className="panel-title">
                     <Layers className="icon-sm text-green" />
-                    <span>LEVEL 2 ORDER BOOK</span>
+                    <span>Level 2 Order Book</span>
                   </div>
-                  <div className="spread-tag">
+                  <div className="spread-tag tabular-nums">
                     Spread: <strong>{orderBook.spread || 0.60}</strong> ({orderBook.spreadBps || 21.1} bps)
                   </div>
                 </div>
 
-                {/* Buy vs Sell Pressure Imbalance Meter */}
                 <div className="pressure-meter-box">
-                  <div className="pressure-labels">
-                    <span className="text-green font-mono">Bids {(100 - (orderBook.imbalance > 0 ? (1 - orderBook.imbalance) * 50 : 50)).toFixed(0)}%</span>
-                    <span className="text-muted">Order Imbalance</span>
-                    <span className="text-red font-mono">Asks {(50 - (orderBook.imbalance || 0) * 50).toFixed(0)}%</span>
+                  <div className="pressure-labels tabular-nums">
+                    <span className="text-green font-mono">Bids {bidPct}%</span>
+                    <span className="text-muted">Book Imbalance</span>
+                    <span className="text-red font-mono">Asks {askPct}%</span>
                   </div>
                   <div className="pressure-bar">
-                    <div 
-                      className="bar-bids" 
-                      style={{ width: `${Math.min(90, Math.max(10, 50 + (orderBook.imbalance || 0) * 50))}%` }}
-                    />
+                    <div className="bar-bids" style={{ width: `${bidPct}%` }} />
                   </div>
                 </div>
 
-                {/* Depth Table */}
                 <div className="orderbook-table-container">
                   <div className="ob-table-header">
-                    <span>PRICE (INR)</span>
-                    <span>SIZE (SH)</span>
-                    <span>TOTAL</span>
+                    <span>Price (INR)</span>
+                    <span>Size</span>
+                    <span>Cumul.</span>
                   </div>
 
-                  {/* Asks (Sells) in reverse order (red) */}
-                  <div className="ob-rows asks-side">
-                    {orderBook.asks && orderBook.asks.slice(0, 6).reverse().map((a, i) => {
-                      const depthPct = Math.min(100, (a.total / (orderBook.totalAskVol || 1)) * 100);
-                      return (
-                        <div key={`ask-${i}`} className="ob-row ask-row">
-                          <div className="depth-fill red-fill" style={{ width: `${depthPct}%` }} />
-                          <span className="ob-price text-red font-mono">{a.price.toFixed(2)}</span>
-                          <span className="ob-size font-mono">{a.size.toLocaleString()}</span>
-                          <span className="ob-total font-mono text-muted">{a.total.toLocaleString()}</span>
-                        </div>
-                      );
-                    })}
+                  <div className="ob-rows asks-side tabular-nums">
+                    {orderBook.asks &&
+                      orderBook.asks
+                        .slice(0, 5)
+                        .reverse()
+                        .map((a, i) => {
+                          const depthPct = Math.min(100, (a.total / (orderBook.totalAskVol || 1)) * 100);
+                          return (
+                            <button
+                              type="button"
+                              key={`ask-${i}`}
+                              onClick={() => handlePrefillLimitPrice(a.price, "BUY")}
+                              className="ob-row ob-row-btn ask-row"
+                              title="Click to populate Limit Buy price"
+                            >
+                              <div className="depth-fill red-fill" style={{ width: `${depthPct}%` }} />
+                              <span className="ob-price text-red font-mono">{a.price.toFixed(2)}</span>
+                              <span className="ob-size font-mono">{a.size.toLocaleString()}</span>
+                              <span className="ob-total font-mono text-muted">{a.total.toLocaleString()}</span>
+                            </button>
+                          );
+                        })}
                   </div>
 
-                  {/* Mid Price Separator Ribbon */}
-                  <div className="ob-mid-ribbon">
-                    <span className="mid-label">MID:</span>
-                    <span className={`mid-price ${lastTickSide === "up" ? "text-green" : "text-red"}`}>
+                  <div className="ob-mid-ribbon tabular-nums">
+                    <span className="mid-label">Mid</span>
+                    <span className={`mid-price ${lastTickSide === "up" ? "text-green" : lastTickSide === "down" ? "text-red" : ""}`}>
                       ₹{quote.price.toFixed(2)}
                     </span>
-                    <span className="mid-delta">{quote.pctChange >= 0 ? "+" : ""}{quote.pctChange}%</span>
+                    <span className={`mid-delta ${isPositive ? "text-green" : "text-red"}`}>
+                      {isPositive ? "+" : ""}{quote.pctChange.toFixed(2)}%
+                    </span>
                   </div>
 
-                  {/* Bids (Buys) in descending order (green) */}
-                  <div className="ob-rows bids-side">
-                    {orderBook.bids && orderBook.bids.slice(0, 6).map((b, i) => {
-                      const depthPct = Math.min(100, (b.total / (orderBook.totalBidVol || 1)) * 100);
-                      return (
-                        <div key={`bid-${i}`} className="ob-row bid-row">
-                          <div className="depth-fill green-fill" style={{ width: `${depthPct}%` }} />
-                          <span className="ob-price text-green font-mono">{b.price.toFixed(2)}</span>
-                          <span className="ob-size font-mono">{b.size.toLocaleString()}</span>
-                          <span className="ob-total font-mono text-muted">{b.total.toLocaleString()}</span>
-                        </div>
-                      );
-                    })}
+                  <div className="ob-rows bids-side tabular-nums">
+                    {orderBook.bids &&
+                      orderBook.bids.slice(0, 5).map((b, i) => {
+                        const depthPct = Math.min(100, (b.total / (orderBook.totalBidVol || 1)) * 100);
+                        return (
+                          <button
+                            type="button"
+                            key={`bid-${i}`}
+                            onClick={() => handlePrefillLimitPrice(b.price, "SELL")}
+                            className="ob-row ob-row-btn bid-row"
+                            title="Click to populate Limit Sell price"
+                          >
+                            <div className="depth-fill green-fill" style={{ width: `${depthPct}%` }} />
+                            <span className="ob-price text-green font-mono">{b.price.toFixed(2)}</span>
+                            <span className="ob-size font-mono">{b.size.toLocaleString()}</span>
+                            <span className="ob-total font-mono text-muted">{b.total.toLocaleString()}</span>
+                          </button>
+                        );
+                      })}
                   </div>
                 </div>
               </div>
 
-              {/* Time & Sales (The Tape) */}
+              {/* Interactive CRED OTC Order & Position Desk */}
+              <div className="terminal-panel lot-calc-panel">
+                <div className="panel-header">
+                  <div className="panel-title">
+                    <Briefcase className="icon-sm text-gold" />
+                    <span>CRED OTC Order &amp; Position Desk</span>
+                  </div>
+                  <span className="spread-tag">1 Lot = 50 sh</span>
+                </div>
+
+                <div className="lot-calc-body">
+                  {/* Buy / Sell + Market / Limit Switchers */}
+                  <div className="order-desk-controls">
+                    <div className="side-switch" role="group" aria-label="Order side">
+                      <button
+                        type="button"
+                        onClick={() => setOrderSide("BUY")}
+                        className={`side-btn ${orderSide === "BUY" ? "active-buy" : ""}`}
+                      >
+                        Buy OTC
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOrderSide("SELL")}
+                        className={`side-btn ${orderSide === "SELL" ? "active-sell" : ""}`}
+                      >
+                        Sell OTC
+                      </button>
+                    </div>
+
+                    <div className="type-switch" role="group" aria-label="Order execution type">
+                      <button
+                        type="button"
+                        onClick={() => setOrderType("MARKET")}
+                        className={`otype-btn ${orderType === "MARKET" ? "active" : ""}`}
+                      >
+                        Market
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOrderType("LIMIT");
+                          setLimitPrice(Number(credLivePrice.toFixed(2)));
+                        }}
+                        className={`otype-btn ${orderType === "LIMIT" ? "active" : ""}`}
+                      >
+                        Limit
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Lots Stepper */}
+                  <div className="lot-input-row">
+                    <label htmlFor="cred-lot-input" className="lot-label">
+                      Lots ({selectedSharesCount.toLocaleString("en-IN")} shares)
+                    </label>
+                    <div className="lot-stepper">
+                      <button
+                        type="button"
+                        className="lot-step-btn"
+                        onClick={() => setLotCount((c) => Math.max(1, c - 1))}
+                        aria-label="Decrease lots"
+                      >
+                        −
+                      </button>
+                      <input
+                        id="cred-lot-input"
+                        type="number"
+                        min={1}
+                        max={2000}
+                        value={lotCount}
+                        onChange={(e) => setLotCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                        className="lot-number-input tabular-nums"
+                      />
+                      <button
+                        type="button"
+                        className="lot-step-btn"
+                        onClick={() => setLotCount((c) => Math.min(2000, c + 1))}
+                        aria-label="Increase lots"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  {orderType === "LIMIT" && (
+                    <div className="lot-input-row">
+                      <label htmlFor="cred-limit-input" className="lot-label">Limit Price (₹)</label>
+                      <input
+                        id="cred-limit-input"
+                        type="number"
+                        step="0.50"
+                        value={limitPrice}
+                        onChange={(e) => setLimitPrice(parseFloat(e.target.value) || 0)}
+                        className="limit-price-input tabular-nums"
+                      />
+                    </div>
+                  )}
+
+                  <div className="lot-summary-grid tabular-nums">
+                    <div>
+                      <span className="lot-sum-label">Ticket Value (INR)</span>
+                      <strong className="lot-sum-val text-green">
+                        ₹{Math.round(otcOrderInr).toLocaleString("en-IN")}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="lot-sum-label">USD Equivalent</span>
+                      <strong className="lot-sum-val">${Math.round(otcOrderUsd).toLocaleString("en-US")}</strong>
+                    </div>
+                    <div>
+                      <span className="lot-sum-label">Company Equity %</span>
+                      <strong className="lot-sum-val text-cyan">{equityStakePct.toFixed(6)}%</strong>
+                    </div>
+                    <div>
+                      <span className="lot-sum-label">Vs. Series F (₹342)</span>
+                      <strong className="lot-sum-val text-gold">
+                        {(((effectiveFillPrice - 342) / 342) * 100).toFixed(1)}%
+                      </strong>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleExecuteSimulatedOrder}
+                    className={`execute-order-btn ${orderSide === "BUY" ? "btn-buy" : "btn-sell"}`}
+                  >
+                    {orderSide === "BUY" ? "Simulate Buy" : "Simulate Sell"} {selectedSharesCount} CRED @ ₹{effectiveFillPrice.toFixed(2)}
+                  </button>
+
+                  {orderNotice && <div className="order-notice-line">{orderNotice}</div>}
+
+                  {/* Live Simulated Position Tracker */}
+                  <div className="sim-position-box tabular-nums">
+                    <div className="sim-pos-head">
+                      <span>Paper Position: <strong>{position.shares.toLocaleString("en-IN")} sh</strong></span>
+                      <button
+                        type="button"
+                        className="pos-reset-btn"
+                        onClick={() => {
+                          setPosition({ shares: 500, avgCost: 271.20 });
+                          setOrderNotice("Reset paper position to 500 shares.");
+                        }}
+                        title="Reset simulated position"
+                      >
+                        <RotateCcw size={12} /> Reset
+                      </button>
+                    </div>
+                    <div className="sim-pos-metrics">
+                      <div>
+                        <span className="lot-sum-label">Avg Cost</span>
+                        <span>₹{position.avgCost.toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span className="lot-sum-label">Live Value</span>
+                        <span>₹{Math.round(positionMarketVal).toLocaleString("en-IN")}</span>
+                      </div>
+                      <div>
+                        <span className="lot-sum-label">Unrealized P&amp;L</span>
+                        <span className={positionPnlInr >= 0 ? "text-green" : "text-red"}>
+                          {positionPnlInr >= 0 ? "+" : ""}₹{Math.round(positionPnlInr).toLocaleString("en-IN")} ({positionPnlPct >= 0 ? "+" : ""}{positionPnlPct.toFixed(2)}%)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Time & Sales */}
               <div className="terminal-panel tape-panel">
                 <div className="panel-header">
                   <div className="panel-title">
                     <Activity className="icon-sm text-cyan" />
-                    <span>TIME &amp; SALES (THE TAPE)</span>
+                    <span>Time &amp; Sales Tape</span>
                   </div>
                   <div className="tape-live-tag">
-                    <span className="pulse-dot"></span> LIVE
+                    <span className="pulse-dot" /> Live
                   </div>
                 </div>
 
                 <div className="tape-list-container">
                   <div className="tape-header">
-                    <span>TIME</span>
-                    <span>PRICE</span>
-                    <span>QTY</span>
-                    <span>INSTITUTION</span>
+                    <span>Time</span>
+                    <span>Price</span>
+                    <span>Qty</span>
+                    <span>Desk</span>
                   </div>
-                  <div className="tape-rows">
-                    {tape && tape.slice(0, 12).map((t, idx) => {
-                      const isBuy = t.side === "BUY";
-                      return (
-                        <div key={t.id || idx} className={`tape-row ${idx === 0 ? "new-trade-flash" : ""}`}>
-                          <span className="tape-time font-mono text-muted">{t.time}</span>
-                          <span className={`tape-price font-mono ${isBuy ? "text-green" : "text-red"}`}>
-                            ₹{t.price.toFixed(2)}
-                          </span>
-                          <span className="tape-size font-mono">
-                            {t.size.toLocaleString()}
-                          </span>
-                          <span className="tape-inst truncate" title={t.institution}>
-                            {t.institution.split(" ")[0]}
-                          </span>
-                        </div>
-                      );
-                    })}
+                  <div className="tape-rows tabular-nums">
+                    {tape &&
+                      tape.slice(0, 7).map((t, idx) => {
+                        const isBuy = t.side === "BUY";
+                        return (
+                          <div key={t.id || idx} className={`tape-row ${idx === 0 ? "new-trade-flash" : ""}`}>
+                            <span className="tape-time font-mono text-muted">{t.time}</span>
+                            <span className={`tape-price font-mono ${isBuy ? "text-green" : "text-red"}`}>
+                              ₹{t.price.toFixed(2)}
+                            </span>
+                            <span className="tape-size font-mono">{t.size.toLocaleString()}</span>
+                            <span className="tape-inst truncate" title={t.institution}>
+                              {t.institution?.split(" ")[0] || "OTC"}
+                            </span>
+                          </div>
+                        );
+                      })}
                   </div>
                 </div>
               </div>
-
             </div>
-
           </div>
         </Reveal>
 
-        {/* Live Financial Wire & Macro News Ticker */}
-        <Reveal delay={0.15}>
+        {/* Financial Wire & Macro News */}
+        <Reveal delay={120}>
           <div className="financial-news-terminal">
             <div className="news-header-bar">
               <div className="news-title">
                 <Zap className="icon-sm text-gold" />
-                <span>REAL-TIME FINANCIAL WIRE &amp; SENTIMENT FEED</span>
+                <span>Financial Wire &amp; Deal Intelligence</span>
               </div>
               <div className="news-filters">
                 {["ALL", "EARNINGS", "M&A", "REGULATORY", "CREDIT"].map((cat) => (
@@ -895,9 +1180,9 @@ export default function LiveTradingTerminal({
                     </div>
                     <h4 className="news-headline">{n.headline}</h4>
                     <div className="news-card-footer">
-                      <span className="news-category-badge">{n.category}</span>
+                      <span className="news-category-text">{n.category}</span>
                       <span className={`news-sentiment-badge ${isBullish ? "sentiment-bull" : "sentiment-neutral"}`}>
-                        {isBullish ? "▲ Bullish" : "● Neutral"} ({(n.sentiment * 100).toFixed(0)}%)
+                        {isBullish ? "Bullish" : "Neutral"} ({(n.sentiment * 100).toFixed(0)}%)
                       </span>
                     </div>
                   </div>
@@ -906,7 +1191,6 @@ export default function LiveTradingTerminal({
             </div>
           </div>
         </Reveal>
-
       </div>
     </section>
   );

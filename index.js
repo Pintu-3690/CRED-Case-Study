@@ -4,6 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import * as data from "./data.js";
 import { marketEngine } from "./api/marketEngine.js";
+import { streamCredChat, formatGeminiError } from "./api/gemini.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -112,6 +113,50 @@ app.post("/api/market/dcf-model", (req, res) => {
   const params = req.body || {};
   const result = marketEngine.calculateDCFModel(params);
   res.json(result);
+});
+
+// 9. Multi-Turn Gemini Research & Query Chatbot (SSE Streaming)
+app.post("/api/chat", async (req, res) => {
+  const { messages, mode } = req.body || {};
+  const liveQuote = marketEngine.getQuote("CRED:UNLST");
+  const telemetry = marketEngine.getTelemetrySnapshot();
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
+
+  const sendEvent = (payload) => {
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    }
+  };
+
+  try {
+    const { stream, model } = await streamCredChat({
+      messages,
+      liveQuote,
+      telemetry,
+      mode,
+    });
+
+    sendEvent({ meta: { model } });
+
+    for await (const chunk of stream) {
+      const delta = chunk?.text;
+      if (delta) {
+        sendEvent({ text: delta });
+      }
+    }
+
+    sendEvent({ done: true });
+    res.end();
+  } catch (err) {
+    const formatted = formatGeminiError(err);
+    sendEvent({ error: formatted.message, status: formatted.status });
+    res.end();
+  }
 });
 
 app.get("/api/health", (req, res) => res.json({ ok: true, status: "active", marketEngine: "running" }));

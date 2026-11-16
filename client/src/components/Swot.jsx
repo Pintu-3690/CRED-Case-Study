@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ShieldAlert, Zap, TrendingUp, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ShieldAlert, Zap, TrendingUp, AlertTriangle } from "lucide-react";
 import Reveal from "./Reveal";
 
 const QUADRANTS = [
@@ -17,15 +17,15 @@ export default function Swot({ swot }) {
   return (
     <div className="swot-section-wrapper">
       <Reveal className="section-head">
-        <div className="eyebrow-pill">
-          <Zap size={14} className="accent-green" />
-          <span>STRATEGIC AUDIT</span>
+        <div className="editorial-kicker">
+          <span>14</span>
+          <span aria-hidden="true">·</span>
+          <span>Strategic Audit (SWOT)</span>
         </div>
         <h2>SWOT Analysis</h2>
         <p>Comprehensive evaluation of CRED&rsquo;s internal competitive assets and external market risks.</p>
       </Reveal>
 
-      {/* Tab Filter */}
       <div className="swot-filter-bar">
         <button
           className={`swot-tab-pill ${activeTab === "all" ? "active" : ""}`}
@@ -49,9 +49,23 @@ export default function Swot({ swot }) {
         {QUADRANTS.filter((q) => activeTab === "all" || activeTab === q.key).map((q, i) => {
           const IconComp = q.icon;
           return (
-            <Reveal as="div" key={q.key} delay={i * 60} className={`card swot-card-v2 ${q.key}`}>
-              <div className="swot-card-head" style={{ borderLeftColor: q.color }}>
-                <div className="swot-icon-badge" style={{ backgroundColor: `rgba(${q.color === "#00df82" ? "0,223,130" : q.color === "#ff3355" ? "255,51,85" : q.color === "#00e5ff" ? "0,229,255" : "255,215,0"}, 0.15)`, color: q.color }}>
+            <Reveal as="div" key={q.key} delay={i * 50} className={`card swot-card-v2 ${q.key}`}>
+              <div className="swot-card-head">
+                <div
+                  className="swot-icon-badge"
+                  style={{
+                    backgroundColor: `rgba(${
+                      q.color === "#00df82"
+                        ? "0,223,130"
+                        : q.color === "#ff3355"
+                        ? "255,51,85"
+                        : q.color === "#00e5ff"
+                        ? "0,229,255"
+                        : "255,215,0"
+                    }, 0.14)`,
+                    color: q.color,
+                  }}
+                >
                   <IconComp size={18} />
                 </div>
                 <h3 style={{ color: q.color }}>{q.label}</h3>

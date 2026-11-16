@@ -3,25 +3,28 @@ import Reveal from "./Reveal";
 export default function Sources({ sources, updated }) {
   if (!sources) return null;
   return (
-    <section id="sources">
+    <section id="sources" className="sources-section">
       <div className="container">
-        <Reveal as="div" className="card sources">
-          <span className="eyebrow">Sources &amp; Disclaimer</span>
-          <p style={{ marginTop: 14, fontSize: "0.88rem", color: "var(--ink-dim)", maxWidth: "72ch" }}>
-            {sources.intro}
-          </p>
+        <Reveal as="div" className="card sources-card">
+          <div className="editorial-kicker">
+            <span>19</span>
+            <span aria-hidden="true">·</span>
+            <span>Methodology &amp; Primary Sources</span>
+          </div>
+          <h2>Sources &amp; Analytical Disclosures</h2>
+          <p className="sources-intro">{sources.intro}</p>
 
-          <div className="sources__cols">
-            <div className="sources__col verified">
-              <h4>Verified facts</h4>
+          <div className="sources-grid">
+            <div className="sources-col verified">
+              <h4>Verified Facts &amp; Filings</h4>
               <ul>
                 {sources.verifiedFacts.map((f) => (
                   <li key={f}>{f}</li>
                 ))}
               </ul>
             </div>
-            <div className="sources__col estimate">
-              <h4>Estimates &amp; analysis</h4>
+            <div className="sources-col estimate">
+              <h4>Estimates &amp; Modeling</h4>
               <ul>
                 {sources.estimatesAndAnalysis.map((f) => (
                   <li key={f}>{f}</li>
@@ -30,10 +33,8 @@ export default function Sources({ sources, updated }) {
             </div>
           </div>
 
-          <div className="disclaimer">{sources.disclaimer}</div>
-          <p style={{ marginTop: 14, fontFamily: "var(--font-mono)", fontSize: "0.72rem", color: "var(--ink-faint)" }}>
-            Research updated on: {updated}
-          </p>
+          <div className="sources-disclaimer">{sources.disclaimer}</div>
+          <p className="sources-updated font-mono">Research updated: {updated}</p>
         </Reveal>
       </div>
     </section>

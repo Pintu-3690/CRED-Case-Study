@@ -19,9 +19,10 @@ export default function BusinessModel({ model }) {
     <section className="business-model-section" id="business-model">
       <div className="container">
         <Reveal className="section-head">
-          <div className="eyebrow-pill">
-            <Target size={14} className="accent-red" />
-            <span>BUSINESS MODEL CANVAS</span>
+          <div className="editorial-kicker">
+            <span>13</span>
+            <span aria-hidden="true">·</span>
+            <span>Business Model Canvas</span>
           </div>
           <h2>Nine Blocks, One Gated Ecosystem</h2>
           <p>How CRED orchestrates partners, high-touch activities, and revenue streams around its 750+ CIBIL filter.</p>
@@ -31,9 +32,9 @@ export default function BusinessModel({ model }) {
           {BLOCKS.map((b, i) => {
             const IconComp = b.icon;
             return (
-              <Reveal as="div" key={b.key} delay={i * 40} className="card canvas-card-v2">
+              <Reveal as="div" key={b.key} delay={i * 35} className="card canvas-card-v2">
                 <div className="canvas-card-top">
-                  <div className="canvas-icon-wrap" style={{ color: b.color, backgroundColor: `rgba(255,255,255,0.05)` }}>
+                  <div className="canvas-icon-wrap" style={{ color: b.color, backgroundColor: "rgba(255,255,255,0.05)" }}>
                     <IconComp size={18} />
                   </div>
                   <h4 style={{ color: b.color }}>{b.label}</h4>

@@ -1,5 +1,5 @@
 // High-Performance In-Memory Real-Time Trading & Market Data Engine
-// Simulates institutional OTC secondary trading desk for unlisted tech shares (CRED / Dreamplug Technologies)
+// Institutional OTC secondary trading desk for unlisted tech shares (CRED / Dreamplug Technologies)
 // and multi-asset fintech market feeds with tick generation, Level 2 Order Book, Time & Sales tape,
 // Candlestick OHLCV aggregation, DCF valuation modeling, and financial news streaming.
 
@@ -22,7 +22,6 @@ class MarketEngine {
         currency: "INR",
         tickSize: 0.05,
         lotSize: 50,
-        impliedMarketCapUsd: 4.50, // Billion
         sharesOutstandingM: 1320.4,
       },
       "PAYTM:NSE": {
@@ -40,6 +39,8 @@ class MarketEngine {
         volatility: 0.024,
         currency: "INR",
         tickSize: 0.05,
+        lotSize: 1,
+        sharesOutstandingM: 636.8,
       },
       "POLICYBZR:NSE": {
         symbol: "POLICYBZR:NSE",
@@ -56,6 +57,8 @@ class MarketEngine {
         volatility: 0.021,
         currency: "INR",
         tickSize: 0.05,
+        lotSize: 1,
+        sharesOutstandingM: 456.2,
       },
       "ZOMATO:NSE": {
         symbol: "ZOMATO:NSE",
@@ -72,11 +75,13 @@ class MarketEngine {
         volatility: 0.028,
         currency: "INR",
         tickSize: 0.05,
+        lotSize: 1,
+        sharesOutstandingM: 8830.0,
       },
       "NIFTY_FIN:INDEX": {
         symbol: "NIFTY_FIN:INDEX",
         name: "Nifty Financial Services Index",
-        assetClass: "Index",
+        assetClass: "Benchmark Index",
         basePrice: 24890.50,
         price: 24890.50,
         open24h: 24750.00,
@@ -88,11 +93,13 @@ class MarketEngine {
         volatility: 0.009,
         currency: "INR",
         tickSize: 0.5,
+        lotSize: 1,
+        sharesOutstandingM: 0,
       },
       "USDINR:FOREX": {
         symbol: "USDINR:FOREX",
         name: "USD / INR Spot Reference",
-        assetClass: "Currency",
+        assetClass: "FX Reference",
         basePrice: 87.42,
         price: 87.42,
         open24h: 87.38,
@@ -104,16 +111,20 @@ class MarketEngine {
         volatility: 0.002,
         currency: "INR",
         tickSize: 0.0025,
+        lotSize: 1000,
+        sharesOutstandingM: 0,
       }
     };
 
-    // In-memory trade tape buffer (recent 100 trades)
-    this.tape = [];
+    // Per-symbol in-memory trade tape buffers
+    this.tapes = {};
     this.orderBooks = {};
-    this.candles = {}; // resolution -> symbol -> array of OHLCV
+    this.candles = {};
     this.newsFeed = [];
     this.sseClients = new Set();
     this.tickCounter = 0;
+    this.tradeSeq = 0;
+    this.newsSeq = 0;
 
     this.institutions = [
       "Tiger Global Secondary",
@@ -182,9 +193,22 @@ class MarketEngine {
 
     this.initHistoricalCandles();
     this.initOrderBooks();
-    this.initInitialTape();
+    this.initInitialTapes();
     this.initInitialNews();
     this.startEngineLoops();
+  }
+
+  getUsdInr() {
+    return this.symbols["USDINR:FOREX"]?.price || 87.42;
+  }
+
+  computeMarketCaps(s) {
+    if (!s.sharesOutstandingM || s.sharesOutstandingM <= 0) {
+      return { impliedMarketCapUsd: 0, impliedMarketCapInrCr: 0 };
+    }
+    const inrCr = Number(((s.price * s.sharesOutstandingM) / 10).toFixed(0));
+    const usdB = Number(((inrCr * 10) / (this.getUsdInr() * 1000)).toFixed(2));
+    return { impliedMarketCapUsd: usdB, impliedMarketCapInrCr: inrCr };
   }
 
   initHistoricalCandles() {
@@ -200,11 +224,24 @@ class MarketEngine {
   generateHistoricalCandles(symbol, resolution) {
     const s = this.symbols[symbol];
     const base = s ? s.basePrice : 284.50;
-    const count = resolution === "1s" ? 60 : resolution === "5s" ? 60 : resolution === "1m" ? 60 : resolution === "15m" ? 48 : resolution === "1D" ? 30 : resolution === "1W" ? 52 : resolution === "1Y" ? 12 : 24;
+    const count =
+      resolution === "1s" ? 60 :
+      resolution === "5s" ? 60 :
+      resolution === "1m" ? 60 :
+      resolution === "15m" ? 48 :
+      resolution === "1D" ? 30 :
+      resolution === "1W" ? 52 :
+      resolution === "1Y" ? 12 : 24;
     const now = Date.now();
-    const intervalMs = resolution === "1s" ? 1000 : resolution === "5s" ? 5000 : resolution === "1m" ? 60000 : resolution === "15m" ? 900000 : resolution === "1D" ? 86400000 : resolution === "1W" ? 604800000 : 2592000000;
+    const intervalMs =
+      resolution === "1s" ? 1000 :
+      resolution === "5s" ? 5000 :
+      resolution === "1m" ? 60000 :
+      resolution === "15m" ? 900000 :
+      resolution === "1D" ? 86400000 :
+      resolution === "1W" ? 604800000 : 2592000000;
 
-    let candles = [];
+    const candles = [];
     let current = base * (resolution === "1Y" || resolution === "ALL" ? 0.72 : 0.98);
 
     for (let i = count; i >= 0; i--) {
@@ -228,7 +265,6 @@ class MarketEngine {
       current = close;
     }
 
-    // Ensure the last candle closes at current price
     if (candles.length > 0) {
       candles[candles.length - 1].close = s.price;
       candles[candles.length - 1].high = Math.max(candles[candles.length - 1].high, s.price);
@@ -245,16 +281,17 @@ class MarketEngine {
   }
 
   generateOrderBook(symbol) {
-    const s = this.symbols[symbol];
-    const mid = s ? s.price : 284.50;
-    const spread = Number((mid * 0.0008).toFixed(2)); // ~8 bps spread
+    const s = this.symbols[symbol] || this.symbols["CRED:UNLST"];
+    const mid = s.price;
+    const step = Math.max(s.tickSize || 0.05, Number((mid * 0.0005).toFixed(2)));
+    const spread = Number((mid * 0.0008).toFixed(2));
 
     const bids = [];
     const asks = [];
 
     let cumBidVol = 0;
     for (let i = 1; i <= 10; i++) {
-      const p = Number((mid - (i * 0.15) - (spread / 2)).toFixed(2));
+      const p = Number((mid - (i * step) - (spread / 2)).toFixed(2));
       const size = Math.floor(Math.random() * 2500 + 400);
       cumBidVol += size;
       bids.push({
@@ -267,7 +304,7 @@ class MarketEngine {
 
     let cumAskVol = 0;
     for (let i = 1; i <= 10; i++) {
-      const p = Number((mid + (i * 0.15) + (spread / 2)).toFixed(2));
+      const p = Number((mid + (i * step) + (spread / 2)).toFixed(2));
       const size = Math.floor(Math.random() * 2500 + 400);
       cumAskVol += size;
       asks.push({
@@ -283,7 +320,7 @@ class MarketEngine {
     const imbalance = Number(((totalBidVol - totalAskVol) / (totalBidVol + totalAskVol)).toFixed(4));
 
     return {
-      symbol,
+      symbol: s.symbol,
       timestamp: Date.now(),
       midPrice: mid,
       spread: Number((asks[0].price - bids[0].price).toFixed(2)),
@@ -292,36 +329,40 @@ class MarketEngine {
       asks,
       totalBidVol,
       totalAskVol,
-      imbalance // positive = buy pressure, negative = sell pressure
+      imbalance
     };
   }
 
-  initInitialTape() {
-    const sym = "CRED:UNLST";
+  initInitialTapes() {
     const now = Date.now();
-    for (let i = 25; i >= 0; i--) {
-      const side = Math.random() > 0.44 ? "BUY" : "SELL";
-      const size = Math.floor(Math.random() * 40 + 1) * 50;
-      const priceOffset = (Math.random() - 0.5) * 0.6;
-      const price = Number((this.symbols[sym].price + priceOffset).toFixed(2));
-      this.tape.push({
-        id: `TX-${now - i * 4000}-${Math.floor(Math.random() * 900 + 100)}`,
-        symbol: sym,
-        price,
-        size,
-        side,
-        time: new Date(now - i * 4000).toLocaleTimeString("en-US", { hour12: false }),
-        timestamp: now - i * 4000,
-        institution: this.institutions[Math.floor(Math.random() * this.institutions.length)],
-        type: size >= 1000 ? "BLOCK" : size >= 500 ? "INSTITUTIONAL" : "OTC_RETAIL"
-      });
-    }
+    Object.keys(this.symbols).forEach((sym) => {
+      const s = this.symbols[sym];
+      this.tapes[sym] = [];
+      for (let i = 25; i >= 0; i--) {
+        const side = Math.random() > 0.44 ? "BUY" : "SELL";
+        const lot = s.lotSize || 50;
+        const size = Math.floor(Math.random() * 35 + 1) * lot;
+        const priceOffset = (Math.random() - 0.5) * (s.price * 0.002);
+        const price = Number((s.price + priceOffset).toFixed(2));
+        this.tapes[sym].push({
+          id: `TX-${sym}-${now - i * 4000}-${++this.tradeSeq}`,
+          symbol: sym,
+          price,
+          size,
+          side,
+          time: new Date(now - i * 4000).toLocaleTimeString("en-US", { hour12: false }),
+          timestamp: now - i * 4000,
+          institution: this.institutions[Math.floor(Math.random() * this.institutions.length)],
+          type: size >= lot * 20 ? "BLOCK" : size >= lot * 10 ? "INSTITUTIONAL" : "OTC_RETAIL"
+        });
+      }
+    });
   }
 
   initInitialNews() {
     const now = Date.now();
     this.newsFeed = this.newsTemplates.map((t, idx) => ({
-      id: `NEWS-${now - idx * 600000}`,
+      id: `NEWS-${now - idx * 600000}-${++this.newsSeq}`,
       ...t,
       timestamp: now - idx * 600000,
       timeAgo: `${idx * 10 + 2}m ago`,
@@ -330,12 +371,10 @@ class MarketEngine {
   }
 
   startEngineLoops() {
-    // 1. High-Frequency Market Tick Generator (runs every 600ms)
     setInterval(() => {
       this.generateTick();
-    }, 600);
+    }, 650);
 
-    // 2. Breaking News & Macro Events (runs every 35s)
     setInterval(() => {
       this.generateNewsEvent();
     }, 35000);
@@ -343,72 +382,76 @@ class MarketEngine {
 
   generateTick() {
     this.tickCounter++;
-    const mainSym = "CRED:UNLST";
-    const cred = this.symbols[mainSym];
+    const quotesMap = {};
+    const orderBooksMap = {};
+    const lastTradesMap = {};
 
-    // Jump-diffusion + mean-reverting random walk
-    const isJump = Math.random() < 0.05; // 5% chance of institutional block jump
-    const jumpMagnitude = isJump ? (Math.random() - 0.42) * 1.2 : 0;
-    const normalDelta = (Math.random() - 0.48) * (cred.basePrice * cred.volatility * 0.06);
-    const delta = normalDelta + jumpMagnitude;
-
-    const newPrice = Number(Math.max(200.0, cred.price + delta).toFixed(2));
-    cred.price = newPrice;
-    cred.high24h = Math.max(cred.high24h, newPrice);
-    cred.low24h = Math.min(cred.low24h, newPrice);
-    cred.volume24h += Math.floor(Math.random() * 300 + 50);
-
-    // Recompute VWAP
-    cred.vwap = Number(((cred.vwap * 0.98) + (newPrice * 0.02)).toFixed(2));
-
-    // Update other peer symbols mildly correlated
     Object.keys(this.symbols).forEach((sym) => {
-      if (sym === mainSym) return;
       const s = this.symbols[sym];
-      const sDelta = (Math.random() - 0.49) * (s.basePrice * s.volatility * 0.04);
-      s.price = Number((s.price + sDelta).toFixed(2));
-      s.high24h = Math.max(s.high24h, s.price);
-      s.low24h = Math.min(s.low24h, s.price);
+      const isMain = sym === "CRED:UNLST";
+      const isJump = isMain && Math.random() < 0.05;
+      const jumpMagnitude = isJump ? (Math.random() - 0.42) * 1.15 : 0;
+      const normalDelta = (Math.random() - 0.485) * (s.basePrice * s.volatility * (isMain ? 0.06 : 0.045));
+      const delta = normalDelta + jumpMagnitude;
+
+      const minFloor = s.basePrice * 0.55;
+      const newPrice = Number(Math.max(minFloor, s.price + delta).toFixed(sym === "USDINR:FOREX" ? 4 : 2));
+      s.price = newPrice;
+      s.high24h = Math.max(s.high24h, newPrice);
+      s.low24h = Math.min(s.low24h, newPrice);
+      if (s.volume24h > 0) {
+        s.volume24h += Math.floor(Math.random() * (isMain ? 280 : 1200) + 40);
+      }
+      s.vwap = Number(((s.vwap * 0.98) + (newPrice * 0.02)).toFixed(2));
+
+      this.updateCandlesWithLatestPrice(sym, newPrice);
+
+      // Update order book & tape for CRED on every tick and other symbols periodically
+      if (isMain || this.tickCounter % 2 === 0) {
+        this.orderBooks[sym] = this.generateOrderBook(sym);
+        orderBooksMap[sym] = this.orderBooks[sym];
+
+        const lot = s.lotSize || 50;
+        const tradeSize = isJump ? Math.floor(Math.random() * 20 + 10) * lot : Math.floor(Math.random() * 14 + 1) * lot;
+        const trade = {
+          id: `TX-${sym}-${Date.now()}-${++this.tradeSeq}`,
+          symbol: sym,
+          price: newPrice,
+          size: tradeSize,
+          side: delta >= 0 ? "BUY" : "SELL",
+          time: new Date().toLocaleTimeString("en-US", { hour12: false }),
+          timestamp: Date.now(),
+          institution: this.institutions[Math.floor(Math.random() * this.institutions.length)],
+          type: tradeSize >= lot * 20 ? "BLOCK" : tradeSize >= lot * 10 ? "INSTITUTIONAL" : "OTC_RETAIL"
+        };
+
+        if (!this.tapes[sym]) this.tapes[sym] = [];
+        this.tapes[sym].unshift(trade);
+        if (this.tapes[sym].length > 80) this.tapes[sym].pop();
+        lastTradesMap[sym] = trade;
+      }
+
+      quotesMap[sym] = this.getQuote(sym);
     });
 
-    // Update real-time candle aggregations
-    this.updateCandlesWithLatestPrice(mainSym, newPrice);
-
-    // Generate trade execution on tape
-    const side = delta >= 0 ? "BUY" : "SELL";
-    const tradeSize = isJump ? Math.floor(Math.random() * 20 + 10) * 100 : Math.floor(Math.random() * 15 + 1) * 50;
-    const tradeId = `TX-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`;
-    const trade = {
-      id: tradeId,
-      symbol: mainSym,
-      price: newPrice,
-      size: tradeSize,
-      side,
-      time: new Date().toLocaleTimeString("en-US", { hour12: false }),
-      timestamp: Date.now(),
-      institution: this.institutions[Math.floor(Math.random() * this.institutions.length)],
-      type: tradeSize >= 1000 ? "BLOCK" : tradeSize >= 500 ? "INSTITUTIONAL" : "OTC_RETAIL"
-    };
-
-    this.tape.unshift(trade);
-    if (this.tape.length > 100) this.tape.pop();
-
-    // Re-generate Order Book based on new mid
-    this.orderBooks[mainSym] = this.generateOrderBook(mainSym);
-
-    // Broadcast to SSE clients if any
+    const credQuote = quotesMap["CRED:UNLST"];
     const packet = {
       type: "TICK",
-      symbol: mainSym,
-      price: newPrice,
-      change: Number((newPrice - cred.prevClose).toFixed(2)),
-      pctChange: Number((((newPrice - cred.prevClose) / cred.prevClose) * 100).toFixed(2)),
-      high24h: cred.high24h,
-      low24h: cred.low24h,
-      vwap: cred.vwap,
-      volume24h: cred.volume24h,
-      lastTrade: trade,
-      orderBook: this.orderBooks[mainSym],
+      symbol: "CRED:UNLST",
+      price: credQuote.price,
+      change: credQuote.change,
+      pctChange: credQuote.pctChange,
+      high24h: credQuote.high24h,
+      low24h: credQuote.low24h,
+      vwap: credQuote.vwap,
+      volume24h: credQuote.volume24h,
+      impliedMarketCapUsd: credQuote.impliedMarketCapUsd,
+      impliedMarketCapInrCr: credQuote.impliedMarketCapInrCr,
+      lastTrade: lastTradesMap["CRED:UNLST"],
+      orderBook: orderBooksMap["CRED:UNLST"],
+      quotes: quotesMap,
+      orderBooks: orderBooksMap,
+      lastTrades: lastTradesMap,
       peers: this.getPeersSnapshot(),
       telemetry: this.getTelemetrySnapshot(),
       timestamp: Date.now()
@@ -426,10 +469,13 @@ class MarketEngine {
       if (!arr || arr.length === 0) return;
 
       const last = arr[arr.length - 1];
-      const intervalMs = res === "1s" ? 1000 : res === "5s" ? 5000 : res === "1m" ? 60000 : res === "15m" ? 900000 : 86400000;
+      const intervalMs =
+        res === "1s" ? 1000 :
+        res === "5s" ? 5000 :
+        res === "1m" ? 60000 :
+        res === "15m" ? 900000 : 86400000;
 
       if (now - last.time > intervalMs) {
-        // Roll to new candle
         arr.push({
           time: now,
           open: last.close,
@@ -441,7 +487,6 @@ class MarketEngine {
         });
         if (arr.length > 120) arr.shift();
       } else {
-        // Update current candle
         last.high = Math.max(last.high, price);
         last.low = Math.min(last.low, price);
         last.close = price;
@@ -454,7 +499,7 @@ class MarketEngine {
   generateNewsEvent() {
     const template = this.newsTemplates[Math.floor(Math.random() * this.newsTemplates.length)];
     const event = {
-      id: `NEWS-${Date.now()}`,
+      id: `NEWS-${Date.now()}-${++this.newsSeq}`,
       ...template,
       timestamp: Date.now(),
       timeAgo: "Just now",
@@ -475,6 +520,7 @@ class MarketEngine {
     return Object.values(this.symbols).map((s) => {
       const diff = Number((s.price - s.prevClose).toFixed(2));
       const pct = Number(((diff / s.prevClose) * 100).toFixed(2));
+      const caps = this.computeMarketCaps(s);
       return {
         symbol: s.symbol,
         name: s.name,
@@ -486,35 +532,44 @@ class MarketEngine {
         high24h: s.high24h,
         low24h: s.low24h,
         volume24h: s.volume24h,
-        vwap: s.vwap
+        vwap: s.vwap,
+        sharesOutstandingM: s.sharesOutstandingM,
+        impliedMarketCapUsd: caps.impliedMarketCapUsd,
+        impliedMarketCapInrCr: caps.impliedMarketCapInrCr
       };
     });
   }
 
   getTelemetrySnapshot() {
     const cred = this.symbols["CRED:UNLST"];
+    const caps = this.computeMarketCaps(cred);
     return {
       activeConnections: this.sseClients.size || 1,
       engineLatencyMs: Number((Math.random() * 0.4 + 0.6).toFixed(2)),
       ticksProcessed: this.tickCounter,
-      matchingEngine: "V8 Real-Time L2 Order Router",
+      matchingEngine: "OTC Secondary Order Router",
       settlementCycle: "T+1 OTC Escrow",
       dailyTpvCr: Number((2489.42 + (this.tickCounter * 0.05)).toFixed(2)),
       upiVelocityTps: Math.floor(Math.random() * 45 + 195),
-      currentImpliedValuationB: Number(((cred.price * cred.sharesOutstandingM) / (cred.price > 250 ? 83.5 : 84) / 1000).toFixed(2)),
+      currentImpliedValuationB: caps.impliedMarketCapUsd,
+      currentImpliedValuationInrCr: caps.impliedMarketCapInrCr,
       lastUpdated: new Date().toISOString()
     };
   }
 
-  // SSE Management
   addSSEClient(res) {
     this.sseClients.add(res);
-    // Send immediate snapshot on connect
+    const quotesMap = {};
+    Object.keys(this.symbols).forEach((sym) => {
+      quotesMap[sym] = this.getQuote(sym);
+    });
     const initialPayload = {
       type: "INIT",
-      quote: this.getQuote("CRED:UNLST"),
+      quote: quotesMap["CRED:UNLST"],
+      quotes: quotesMap,
       orderBook: this.orderBooks["CRED:UNLST"] || this.generateOrderBook("CRED:UNLST"),
-      tape: this.tape.slice(0, 30),
+      orderBooks: this.orderBooks,
+      tape: (this.tapes["CRED:UNLST"] || []).slice(0, 30),
       peers: this.getPeersSnapshot(),
       news: this.newsFeed.slice(0, 10),
       telemetry: this.getTelemetrySnapshot(),
@@ -543,6 +598,7 @@ class MarketEngine {
     const s = this.symbols[symbol] || this.symbols["CRED:UNLST"];
     const diff = Number((s.price - s.prevClose).toFixed(2));
     const pct = Number(((diff / s.prevClose) * 100).toFixed(2));
+    const caps = this.computeMarketCaps(s);
     return {
       symbol: s.symbol,
       name: s.name,
@@ -557,7 +613,9 @@ class MarketEngine {
       prevClose: s.prevClose,
       volume24h: s.volume24h,
       vwap: s.vwap,
-      impliedMarketCapUsd: s.impliedMarketCapUsd || 4.50,
+      lotSize: s.lotSize || 50,
+      impliedMarketCapUsd: caps.impliedMarketCapUsd,
+      impliedMarketCapInrCr: caps.impliedMarketCapInrCr,
       sharesOutstandingM: s.sharesOutstandingM || 1320.4,
       timestamp: Date.now()
     };
@@ -575,14 +633,14 @@ class MarketEngine {
   }
 
   getTape(symbol = "CRED:UNLST", limit = 50) {
-    return this.tape.slice(0, limit);
+    const arr = this.tapes[symbol] || this.tapes["CRED:UNLST"] || [];
+    return arr.slice(0, limit);
   }
 
   getNews(limit = 20) {
     return this.newsFeed.slice(0, limit);
   }
 
-  // Institutional Discounted Cash Flow (DCF) Valuation Engine & Sensitivity Analysis
   calculateDCFModel({
     membersM = 15.2,
     arpuInr = 2150,
@@ -593,34 +651,27 @@ class MarketEngine {
     projectionYears = 5,
     usdInr = 87.40
   }) {
-    // 1. Projections over next 5 years
     const projections = [];
     let currentMembers = Number(membersM);
     let currentArpu = Number(arpuInr);
     let cumulativeDiscountedFcf = 0;
 
     for (let yr = 1; yr <= projectionYears; yr++) {
-      // Compounding members & ARPU growth
       const memberGrowth = yr === 1 ? 0.18 : yr === 2 ? 0.15 : yr === 3 ? 0.12 : yr === 4 ? 0.10 : 0.08;
       const arpuGrowth = yr === 1 ? 0.14 : yr === 2 ? 0.12 : yr === 3 ? 0.10 : 0.08;
 
       currentMembers = currentMembers * (1 + memberGrowth);
       currentArpu = currentArpu * (1 + arpuGrowth);
 
-      // Gross Revenue in Cr (Members * ARPU / 10^7)
       const revenueCr = (currentMembers * 1000000 * currentArpu) / 10000000;
-      
-      // EBITDA Margin ramp from current ~-10% to target margin
       const marginProgress = yr / projectionYears;
       const ebitdaMargin = (-10.8 + (ebitdaMarginTargetPct - (-10.8)) * marginProgress) / 100;
       const ebitdaCr = revenueCr * ebitdaMargin;
 
-      // Free Cash Flow to Firm (FCFF) = EBITDA - Tax (25% once positive) - Reinvestment/Capex (3% of rev)
       const taxCr = ebitdaCr > 0 ? ebitdaCr * 0.25 : 0;
       const capexCr = revenueCr * 0.035;
       const fcffCr = ebitdaCr - taxCr - capexCr;
 
-      // Discount Factor
       const discountFactor = 1 / Math.pow(1 + waccPct / 100, yr);
       const discountedFcfCr = fcffCr * discountFactor;
       cumulativeDiscountedFcf += discountedFcfCr;
@@ -638,44 +689,45 @@ class MarketEngine {
       });
     }
 
-    // 2. Terminal Value Calculation (Gordon Growth Model)
     const finalYearFcff = projections[projections.length - 1].fcffCr;
     const terminalFcff = Math.max(100, finalYearFcff * (1 + terminalGrowthPct / 100));
     const terminalValueCr = terminalFcff / ((waccPct - terminalGrowthPct) / 100);
     const discountedTerminalValueCr = terminalValueCr / Math.pow(1 + waccPct / 100, projectionYears);
 
-    // 3. Enterprise Value & Implied Equity Value
     const enterpriseValueCr = cumulativeDiscountedFcf + discountedTerminalValueCr;
-    const netCashCr = 1850; // Cash on balance sheet post-Meta $900M injection
-    const kuveraAumValueCr = 1200; // Value attributed to ₹50k Cr wealth AUM
+    const netCashCr = 1850;
+    const kuveraAumValueCr = 1200;
     const equityValueCr = Math.max(1000, enterpriseValueCr + netCashCr + kuveraAumValueCr);
 
     const equityValueUsdBillion = Number((equityValueCr / (usdInr * 100)).toFixed(2));
     const sharesOutstandingM = 1320.4;
     const impliedSharePriceInr = Number(((equityValueCr * 10000000) / (sharesOutstandingM * 1000000)).toFixed(2));
 
-    // 4. Sensitivity Matrix: WACC vs Terminal Growth Rate
     const waccSteps = [waccPct - 2, waccPct - 1, waccPct, waccPct + 1, waccPct + 2];
-    const growthSteps = [terminalGrowthPct - 1.5, terminalGrowthPct - 0.75, terminalGrowthPct, terminalGrowthPct + 0.75, terminalGrowthPct + 1.5];
+    const growthSteps = [
+      terminalGrowthPct - 1.5,
+      terminalGrowthPct - 0.75,
+      terminalGrowthPct,
+      terminalGrowthPct + 0.75,
+      terminalGrowthPct + 1.5
+    ];
 
-    const sensitivityMatrix = growthSteps.map((g) => {
-      return {
-        growthRate: Number(g.toFixed(2)),
-        values: waccSteps.map((w) => {
-          if (w <= g) return { wacc: Number(w.toFixed(2)), impliedPrice: 0, valB: 0 };
-          const tv = terminalFcff / ((w - g) / 100);
-          const dtv = tv / Math.pow(1 + w / 100, projectionYears);
-          const ev = cumulativeDiscountedFcf + dtv;
-          const eqVal = ev + netCashCr + kuveraAumValueCr;
-          const price = ((eqVal * 10000000) / (sharesOutstandingM * 1000000));
-          return {
-            wacc: Number(w.toFixed(2)),
-            impliedPrice: Number(price.toFixed(2)),
-            valB: Number((eqVal / (usdInr * 100)).toFixed(2))
-          };
-        })
-      };
-    });
+    const sensitivityMatrix = growthSteps.map((g) => ({
+      growthRate: Number(g.toFixed(2)),
+      values: waccSteps.map((w) => {
+        if (w <= g) return { wacc: Number(w.toFixed(2)), impliedPrice: 0, valB: 0 };
+        const tv = terminalFcff / ((w - g) / 100);
+        const dtv = tv / Math.pow(1 + w / 100, projectionYears);
+        const ev = cumulativeDiscountedFcf + dtv;
+        const eqVal = ev + netCashCr + kuveraAumValueCr;
+        const price = (eqVal * 10000000) / (sharesOutstandingM * 1000000);
+        return {
+          wacc: Number(w.toFixed(2)),
+          impliedPrice: Number(price.toFixed(2)),
+          valB: Number((eqVal / (usdInr * 100)).toFixed(2))
+        };
+      })
+    }));
 
     return {
       inputs: { membersM, arpuInr, takeRatePct, waccPct, terminalGrowthPct, ebitdaMarginTargetPct, usdInr },
